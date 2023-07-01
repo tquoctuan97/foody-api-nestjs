@@ -30,8 +30,8 @@ export class ProductsService {
   create(createProductDto: CreateProductDto) {
     const newProduct: Product = {
       id: String(this.counterId++),
+      title: createProductDto.title.trim(),
       price: createProductDto.price,
-      title: createProductDto.title,
     };
     this.products.push(newProduct);
     return newProduct;
@@ -41,8 +41,8 @@ export class ProductsService {
     const findIndex = this.products.findIndex((p) => p.id === id);
     const updatedProduct: Product = {
       id: this.products[findIndex].id,
+      title: updateProductDto.title.trim(),
       price: updateProductDto.price,
-      title: updateProductDto.title,
     };
     this.products[findIndex] = updatedProduct;
     return updatedProduct;

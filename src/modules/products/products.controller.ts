@@ -7,6 +7,7 @@ import {
   Param,
   Body,
 } from '@nestjs/common';
+import { ApiCreatedResponse, ApiOkResponse } from '@nestjs/swagger';
 import { ProductsService } from './products.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { Product } from 'src/models/product.model';
@@ -22,11 +23,17 @@ export class ProductsController {
   }
 
   @Get(':id')
+  @ApiOkResponse({
+    type: Product,
+  })
   getOne(@Param('id') id: string) {
     return this.productsService.getOne(id);
   }
 
   @Post()
+  @ApiCreatedResponse({
+    type: Product,
+  })
   create(@Body() createProductDto: CreateProductDto): Product {
     return this.productsService.create(createProductDto);
   }
