@@ -1,6 +1,8 @@
 # compiled output
 /dist
 /node_modules
+.pnp*
+.yarn
 
 # Logs
 logs
