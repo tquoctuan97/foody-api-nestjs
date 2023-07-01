@@ -1,56 +1,41 @@
 import { Injectable } from '@nestjs/common';
-import { Product } from 'src/models/product.model';
+import { Product } from 'src/modules/products/product.model';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
 
 @Injectable()
 export class ProductsService {
-  private counterId = 3;
-  private products: Product[] = [
-    {
-      id: '1',
-      title: 'First Product',
-      price: 10,
-    },
-    {
-      id: '2',
-      title: 'Second Product',
-      price: 20,
-    },
-  ];
+  constructor(
+    @InjectModel('Product') private readonly productModel: Model<Product>,
+  ) {}
 
   getAll() {
-    return this.products;
+    return this.productModel.find();
   }
 
   getOne(id: string) {
-    return this.products.find((p) => p.id === id);
+    return this.productModel.findById(id);
   }
 
-  create(createProductDto: CreateProductDto) {
-    const newProduct: Product = {
-      id: String(this.counterId++),
+  async create(createProductDto: CreateProductDto) {
+    const newProduct = new this.productModel({
       title: createProductDto.title.trim(),
       price: createProductDto.price,
-    };
-    this.products.push(newProduct);
-    return newProduct;
+    });
+    const result = await newProduct.save();
+    return result._id;
   }
 
   update(id: string, updateProductDto: UpdateProductDto) {
-    const findIndex = this.products.findIndex((p) => p.id === id);
-    const updatedProduct: Product = {
-      id: this.products[findIndex].id,
+    return this.productModel.findByIdAndUpdate(id, {
       title: updateProductDto.title.trim(),
       price: updateProductDto.price,
-    };
-    this.products[findIndex] = updatedProduct;
-    return updatedProduct;
+    });
   }
 
   delete(id: string) {
-    const newList = this.products.filter((p) => p.id !== id);
-    this.products = newList;
-    return this.products;
+    return this.productModel.findByIdAndDelete(id);
   }
 }
