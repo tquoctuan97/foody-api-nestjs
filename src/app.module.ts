@@ -5,7 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ProductsModule } from './modules/products/products.module';
 import { ConfigModule } from '@nestjs/config';
-
+import { StoresModule } from './modules/stores/stores.module';
 @Module({
   imports: [
     ProductsModule,
@@ -14,6 +14,7 @@ import { ConfigModule } from '@nestjs/config';
       envFilePath: '.env',
     }),
     MongooseModule.forRoot(process.env.CONNECTIONSTRING),
+    StoresModule,
   ],
   controllers: [AppController],
   providers: [AppService],
