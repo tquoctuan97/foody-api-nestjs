@@ -6,6 +6,7 @@ import { Model } from 'mongoose';
 import { Store } from './entities/store.entity';
 import slugify from 'slugify';
 import { StoreParams } from './models/store.model';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class StoresService {
@@ -35,11 +36,15 @@ export class StoresService {
     return result;
   }
 
-  findAll(query?: StoreParams) {
+  async findAll(query?: StoreParams): Promise<PaginationDto<Store[]>> {
     // sort from value of sort query
     // if sort is not provided, sort by createdAt in descending order
     // + for ascending, - for descending
-    return this.storeModel
+    const currentPage = parseInt(query.page) || 1;
+    const pageSize = parseInt(query.pageSize) || 10;
+    const totalCount = await this.storeModel.countDocuments();
+
+    const data = await this.storeModel
       .find({
         name: new RegExp(query.search || '', 'i'),
         status: new RegExp(query.status || '', 'i'),
@@ -49,12 +54,28 @@ export class StoresService {
           cuisines: { $in: query.cuisine.split('|') },
         }),
       })
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .sort(query.sort || '-createdAt')
       .populate({
         path: 'cuisines',
         transform: (cuisine) => ({ _id: cuisine._id, name: cuisine.name }),
       })
-      .sort(query.sort || '-createdAt')
+      .lean<Store[]>()
       .exec();
+
+    const response = new PaginationDto<Store[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      // count total number of pages
+      totalPages: Math.ceil(totalCount / pageSize),
+      // count total number of stores in database
+      totalCount: totalCount,
+      // check if there is next page
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
+
+    return response;
   }
 
   // return a store with cuisine name
