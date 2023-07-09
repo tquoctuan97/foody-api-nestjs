@@ -4,6 +4,8 @@ import { UpdateCuisineDto } from './dto/update-cuisine.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Cuisine } from './entities/cuisine.entity';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class CuisinesService {
@@ -16,8 +18,25 @@ export class CuisinesService {
     return createdCuisine;
   }
 
-  findAll(): Promise<Cuisine[]> {
-    return this.cuisineModel.find().exec();
+  async findAll(query: PaginationParams): Promise<PaginationDto<Cuisine[]>> {
+    const currentPage = parseInt(query.page) || 1;
+    const pageSize = parseInt(query.pageSize) || 10;
+    const totalCount = await this.cuisineModel.countDocuments();
+
+    const data = await this.cuisineModel.find().lean<Cuisine[]>().exec();
+
+    const response = new PaginationDto<Cuisine[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      // count total number of pages
+      totalPages: pageSize === -1 ? 1 : Math.ceil(totalCount / pageSize),
+      // count total number of stores in database
+      totalCount: totalCount,
+      // check if there is next page
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
+
+    return response;
   }
 
   async findOne(id: string): Promise<Cuisine> {
