@@ -13,6 +13,7 @@ import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { StoreParams } from './models/store.model';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 @Controller('api/v1/stores')
 @ApiTags('stores')

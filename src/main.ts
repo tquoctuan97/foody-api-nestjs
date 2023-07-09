@@ -8,8 +8,8 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe());
 
   const config = new DocumentBuilder()
-    .setTitle('Products API')
-    .setDescription('The products API description')
+    .setTitle('Foody API')
+    .setDescription('The foody API description')
     .setVersion('1.0')
     .build();
 

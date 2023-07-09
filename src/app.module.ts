@@ -18,11 +18,11 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
     StoresModule,
     CuisinesModule,
   ],
-  providers: [
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: TransformInterceptor,
-    },
-  ],
+  // providers: [
+  //   {
+  //     provide: APP_INTERCEPTOR,
+  //     useClass: TransformInterceptor,
+  //   },
+  // ],
 })
 export class AppModule {}
