@@ -1,39 +1,47 @@
-import mongoose from 'mongoose';
+import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
+import { Document, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { StoreStatus } from '../models/store.model';
+import { Cuisine } from 'src/modules/cuisines/entities/cuisine.entity';
+import { Min } from 'class-validator';
 
-export const StoreSchema = new mongoose.Schema(
-  {
-    name: { type: String, required: true },
-    slug: { type: String, required: true, unique: true },
-    status: {
-      type: String,
-      enum: Object.values(StoreStatus),
-      default: StoreStatus.DRAFT,
-    },
-    thumbnail: { type: String, required: true },
-    update_at: { type: Date, default: Date.now },
-    create_at: { type: Date, default: Date.now },
-  },
-  { versionKey: false },
-);
+export type Location = {
+  address: string;
+  wardId: Types.ObjectId;
+  districtId: Types.ObjectId;
+  provinceId: Types.ObjectId;
+};
 
-export class Store {
+@Schema({ timestamps: true, versionKey: false })
+export class Store extends Document {
   @ApiProperty()
+  @Prop({ required: true })
   name: string;
 
   @ApiProperty()
+  @Prop({ required: true, unique: true })
   slug: string;
 
   @ApiProperty()
+  @Prop({ enum: Object.values(StoreStatus), default: StoreStatus.DRAFT })
   status: string;
 
   @ApiProperty()
+  @Prop({ required: true })
+  @Min(0)
+  layout: number;
+
+  @ApiProperty()
+  @Prop({ required: true })
   thumbnail: string;
 
   @ApiProperty()
-  update_at: Date;
+  @Prop({ type: Object })
+  location: Location;
 
   @ApiProperty()
-  create_at: Date;
+  @Prop({ type: [{ type: Types.ObjectId, ref: Cuisine.name }] })
+  cuisines: Types.ObjectId[];
 }
+
+export const StoreSchema = SchemaFactory.createForClass(Store);
