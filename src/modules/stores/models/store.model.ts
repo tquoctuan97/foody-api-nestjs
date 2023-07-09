@@ -12,4 +12,10 @@ export class StoreParams {
 
   @ApiPropertyOptional()
   status?: StoreStatus;
+
+  @ApiPropertyOptional()
+  cuisine?: string;
+
+  @ApiPropertyOptional()
+  sort?: string;
 }

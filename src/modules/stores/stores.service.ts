@@ -10,7 +10,7 @@ import { StoreParams } from './models/store.model';
 @Injectable()
 export class StoresService {
   constructor(
-    @InjectModel('Store') private readonly storeModel: Model<Store>,
+    @InjectModel(Store.name) private readonly storeModel: Model<Store>,
   ) {}
 
   async create(createStoreDto: CreateStoreDto) {
@@ -26,19 +26,40 @@ export class StoresService {
       slug = `${slug}-${count + 1}`;
     }
 
-    const result = await this.storeModel.create({ ...createStoreDto, slug });
-    return result._id;
+    const result = await this.storeModel.create({
+      ...createStoreDto,
+      cuisines: createStoreDto.cuisineIds,
+      slug,
+    });
+
+    return result;
   }
 
   findAll(query?: StoreParams) {
-    return this.storeModel.find({
-      name: new RegExp(query.search || '', 'i'),
-      status: new RegExp(query.status || '', 'i'),
-    });
+    // sort from value of sort query
+    // if sort is not provided, sort by createdAt in descending order
+    // + for ascending, - for descending
+    return this.storeModel
+      .find({
+        name: new RegExp(query.search || '', 'i'),
+        status: new RegExp(query.status || '', 'i'),
+        // filter by cuisine string ids are separated by |
+        // if cuisineIds is not provided, return all stores
+        ...(query.cuisine && {
+          cuisines: { $in: query.cuisine.split('|') },
+        }),
+      })
+      .populate({
+        path: 'cuisines',
+        transform: (cuisine) => ({ _id: cuisine._id, name: cuisine.name }),
+      })
+      .sort(query.sort || '-createdAt')
+      .exec();
   }
 
+  // return a store with cuisine name
   findOne(slug: string) {
-    return this.storeModel.findOne({ slug });
+    return this.storeModel.findOne({ slug }).exec();
   }
 
   async update(id: string, updateStoreDto: UpdateStoreDto) {
