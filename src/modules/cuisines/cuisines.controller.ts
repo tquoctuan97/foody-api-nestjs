@@ -6,12 +6,15 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 import { CuisinesService } from './cuisines.service';
 import { CreateCuisineDto } from './dto/create-cuisine.dto';
 import { UpdateCuisineDto } from './dto/update-cuisine.dto';
 import { Cuisine } from './entities/cuisine.entity';
 import { ApiTags } from '@nestjs/swagger';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 @Controller('api/v1/cuisines')
 @ApiTags('cuisines')
@@ -24,8 +27,10 @@ export class CuisinesController {
   }
 
   @Get()
-  findAll(): Promise<Cuisine[]> {
-    return this.cuisinesService.findAll();
+  findAll(
+    @Query() params: PaginationParams,
+  ): Promise<PaginationDto<Cuisine[]>> {
+    return this.cuisinesService.findAll(params);
   }
 
   @Get(':id')
