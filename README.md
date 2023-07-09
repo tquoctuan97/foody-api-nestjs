@@ -48,7 +48,7 @@ $ yarn run test:cov
 
 Always version your API. Version via the URL, not via headers. Versioning APIs always helps to ensure backward compatibility of service while adding new features or updating existing functionality for new clients. The backend will support the old version for a specific amount of time.
 
-- URL: Embed the version in the URL such as `POST /v2/users`.
+- URL: Embed the version in the URL such as `POST /v1/stores`.
 - Header
   - Custom header: Adding a custom X-API-VERSION header key by the client can be used by a service to route a request to the correct endpoint.
   - Accept header: Using the accept header to specify your version.
@@ -60,31 +60,31 @@ Use query parameters for advanced filtering, sorting & searching.
 Pagination:
 
 ```
-GET /companies?page=23&size=50
+GET /stores?page=1&pageSize=10
 ```
 
 Sort:
 
 ```
-GET /companies?sort=-created_at
+GET /stores?sort=-createdAt
 ```
 
 Filter:
 
 ```
-GET /companies?category=software&location=saigon|hanoi
+GET /stores?cuisine=1|2
 ```
 
 Filter by time range:
 
 ```
-GET /companies?time=fromTime-toTime
+GET /stores?time=fromTime-toTime
 ```
 
 Search:
 
 ```
-GET /companies?search=Mckinsey
+GET /stores?search=Mckinsey
 ```
 
 ## Batch Delete
@@ -97,21 +97,21 @@ GET /companies?search=Mckinsey
 - We use a custom `POST` methods to achieve a batch delete functionality:
 
 ```
-POST /companies/batch_delete
+POST /stores/batch_delete
 
 BODY: {
     ids: ["id_1", "id_2"]
 }
 ```
 
-## Auto loading related resource representations
+## Auto loading related resource representations (TODO)
 
 There are many cases where an API consumer needs to load data related to (or referenced from) the resource being requested.
 
 In this case, embed would be a separated list of fields to be embedded. Dot-notation could be used to refer to sub-fields.
 
 ```
-GET /companies/12?embed=lead.name|assigned_user
+GET /stores/12?embed=lead.name|assigned_user
 ```
 
 ## Return something useful from POST, PATCH & PUT requests
@@ -165,7 +165,7 @@ Multi data entries or array
 }
 ```
 
-## Error
+## Error (TODO)
 
 A JSON error body should provide a few things for the developer - a useful error message, a unique error code (that can be looked up for more details in the docs), and possibly detailed description.
 
