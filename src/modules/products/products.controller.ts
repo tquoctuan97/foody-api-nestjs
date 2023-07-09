@@ -13,7 +13,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { Product } from 'src/modules/products/product.model';
 import { UpdateProductDto } from './dto/update-product.dto';
 
-@Controller('products')
+@Controller('api/v1/products')
 @ApiTags('products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}

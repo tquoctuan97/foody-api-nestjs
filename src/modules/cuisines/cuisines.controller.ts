@@ -13,7 +13,7 @@ import { UpdateCuisineDto } from './dto/update-cuisine.dto';
 import { Cuisine } from './entities/cuisine.entity';
 import { ApiTags } from '@nestjs/swagger';
 
-@Controller('cuisines')
+@Controller('api/v1/cuisines')
 @ApiTags('cuisines')
 export class CuisinesController {
   constructor(private readonly cuisinesService: CuisinesService) {}
