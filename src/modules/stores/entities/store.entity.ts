@@ -4,6 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { StoreStatus } from '../models/store.model';
 import { Cuisine } from 'src/modules/cuisines/entities/cuisine.entity';
 import { Min } from 'class-validator';
+import { User } from 'src/modules/users/entities/store.entity';
 
 export type Location = {
   address: string;
@@ -42,6 +43,10 @@ export class Store extends Document {
   @ApiProperty()
   @Prop({ type: [{ type: Types.ObjectId, ref: Cuisine.name }] })
   cuisines: Types.ObjectId[];
+
+  @ApiProperty()
+  @Prop({ type: Types.ObjectId, ref: User.name })
+  owner: Types.ObjectId;
 }
 
 export const StoreSchema = SchemaFactory.createForClass(Store);

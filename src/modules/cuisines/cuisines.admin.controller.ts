@@ -16,9 +16,9 @@ import { ApiTags } from '@nestjs/swagger';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { PaginationParams } from 'src/common/pagination/pagination.model';
 
-@Controller('api/v1/cuisines')
-@ApiTags('cuisines')
-export class CuisinesController {
+@Controller('api/v1/admin/cuisines')
+@ApiTags('admin/cuisines')
+export class CuisinesAdminController {
   constructor(private readonly cuisinesService: CuisinesService) {}
 
   @Post()
