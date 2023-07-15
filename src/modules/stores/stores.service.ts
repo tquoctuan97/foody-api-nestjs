@@ -1,12 +1,13 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { Model, Types } from 'mongoose';
 import { Store } from './entities/store.entity';
 import slugify from 'slugify';
-import { StoreParams } from './models/store.model';
+import { StoreAdminParams, StoreStatus } from './models/store.model';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { Role } from '../users/models/user.model';
 
 @Injectable()
 export class StoresService {
@@ -14,7 +15,7 @@ export class StoresService {
     @InjectModel(Store.name) private readonly storeModel: Model<Store>,
   ) {}
 
-  async create(createStoreDto: CreateStoreDto) {
+  async create(createStoreDto: CreateStoreDto, ownerId: string) {
     let slug = slugify(createStoreDto.slug || createStoreDto.name);
 
     const isExist = await this.storeModel.findOne({ slug });
@@ -29,37 +30,59 @@ export class StoresService {
 
     const result = await this.storeModel.create({
       ...createStoreDto,
-      cuisines: createStoreDto.cuisineIds,
+      cuisines: createStoreDto.cuisineIds.map((id) => new Types.ObjectId(id)),
       slug,
+      owner: new Types.ObjectId(ownerId),
     });
 
     return result;
   }
 
-  async findAll(query?: StoreParams): Promise<PaginationDto<Store[]>> {
+  async findAll(query?: StoreAdminParams): Promise<PaginationDto<Store[]>> {
     // sort from value of sort query
     // if sort is not provided, sort by createdAt in descending order
     // + for ascending, - for descending
     const currentPage = parseInt(query.page) || 1;
     const pageSize = parseInt(query.pageSize) || 10;
-    const totalCount = await this.storeModel.countDocuments();
+
+    const queryStore = {
+      name: new RegExp(query.search || '', 'i'),
+      status: new RegExp(query.status || '', 'i'),
+      // filter by cuisine string ids are separated by |
+      // if cuisineIds is not provided, return all stores
+      ...(query.cuisine && {
+        cuisines: {
+          $in: query.cuisine.split('|').map((id) => new Types.ObjectId(id)),
+        },
+      }),
+      ...(query.owner && {
+        owner: {
+          $in: query.owner.split('|').map((id) => new Types.ObjectId(id)),
+        },
+      }),
+      ...(query?.user?.role === Role.USER && {
+        owner: new Types.ObjectId(query.user.id),
+      }),
+    };
+
+    const totalCount = await this.storeModel.countDocuments(queryStore);
 
     const data = await this.storeModel
-      .find({
-        name: new RegExp(query.search || '', 'i'),
-        status: new RegExp(query.status || '', 'i'),
-        // filter by cuisine string ids are separated by |
-        // if cuisineIds is not provided, return all stores
-        ...(query.cuisine && {
-          cuisines: { $in: query.cuisine.split('|') },
-        }),
-      })
+      .find(queryStore)
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
       .sort(query.sort || '-createdAt')
       .populate({
         path: 'cuisines',
         transform: (cuisine) => ({ _id: cuisine._id, name: cuisine.name }),
+      })
+      .populate({
+        path: 'owner',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+          avatar: user.avatar,
+        }),
       })
       .lean<Store[]>()
       .exec();
@@ -79,17 +102,43 @@ export class StoresService {
   }
 
   // return a store with cuisine name
-  findOne(slug: string) {
-    return this.storeModel.findOne({ slug }).exec();
+  async findOne(slug: string): Promise<Store> {
+    return this.storeModel
+      .findOne({ slug, status: StoreStatus.PUBLISHED })
+      .populate({
+        path: 'cuisines',
+        transform: (cuisine) => ({ _id: cuisine._id, name: cuisine.name }),
+      })
+      .populate({
+        path: 'owner',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+          avatar: user.avatar,
+        }),
+      })
+      .exec();
   }
 
-  async update(id: string, updateStoreDto: UpdateStoreDto) {
+  async update(id: string, updateStoreDto: UpdateStoreDto, ownerId: string) {
+    const store = await this.storeModel.findById(id);
+
+    if (store.owner.toString() !== ownerId) {
+      throw new ForbiddenException();
+    }
+
     await this.storeModel.findByIdAndUpdate(id, updateStoreDto);
     const result = await this.storeModel.findById(id);
     return result;
   }
 
-  remove(id: string) {
+  async remove(id: string, ownerId: string) {
+    const store = await this.storeModel.findById(id);
+
+    if (store.owner.toString() !== ownerId) {
+      throw new ForbiddenException();
+    }
+
     return this.storeModel.findByIdAndDelete(id);
   }
 }

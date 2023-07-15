@@ -6,7 +6,6 @@ import {
   Patch,
   Param,
   Delete,
-  Query,
 } from '@nestjs/common';
 
 import { ApiTags } from '@nestjs/swagger';
@@ -14,16 +13,17 @@ import { Public } from '../auth/decorators/public.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { User } from './entities/store.entity';
 
 @Controller('api/v1/admin/users')
-@ApiTags('admin')
+@ApiTags('admin/users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  // @Post()
-  // create(@Body() createStoreDto: CreateUserDto) {
-  //   return this.usersService.create(createStoreDto);
-  // }
+  @Post()
+  create(@Body() createStoreDto: CreateUserDto): Promise<User> {
+    return this.usersService.create(createStoreDto);
+  }
 
   @Public()
   @Get()
@@ -37,13 +37,13 @@ export class UsersController {
     return this.usersService.findById(id);
   }
 
-  // @Patch(':id')
-  // update(@Param('id') id: string, @Body() updateStoreDto: UpdateUserDto) {
-  //   return this.usersService.update(id, updateStoreDto);
-  // }
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateStoreDto: UpdateUserDto) {
+    return this.usersService.update(id, updateStoreDto);
+  }
 
-  // @Delete(':id')
-  // remove(@Param('id') id: string) {
-  //   return this.usersService.remove(id);
-  // }
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(id);
+  }
 }

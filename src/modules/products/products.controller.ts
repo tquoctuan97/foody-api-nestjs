@@ -14,8 +14,8 @@ import { Product } from 'src/modules/products/product.model';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Public } from '../auth/decorators/public.decorator';
 
-@Controller('api/v1/products')
-@ApiTags('products')
+@Controller('api/v1/admin/products')
+@ApiTags('admin/products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
 

@@ -4,6 +4,7 @@ import { User } from './entities/store.entity';
 import { Model } from 'mongoose';
 import { CreateUserDto } from './dto/create-user.dto';
 import { hashPassword } from '../auth/utils/hashPassword';
+import { UpdateUserDto } from './dto/update-user.dto';
 
 @Injectable()
 export class UsersService {
@@ -15,19 +16,15 @@ export class UsersService {
     return this.userModel.find().exec();
   }
 
-  async findById(id: string): Promise<User> {
-    return this.userModel.findById(id).exec();
+  async findById(id: string): Promise<Partial<User>> {
+    return await this.userModel.findById(id).select('-password').exec();
   }
 
   async findByEmail(email: string): Promise<User> {
     return this.userModel.findOne({ email }).exec();
   }
 
-  // async findOne(username: string): Promise<User | undefined> {
-  //   return this.users.find((user) => user.username === username);
-  // }
-
-  async create(createUserDto: CreateUserDto) {
+  async create(createUserDto: CreateUserDto): Promise<User> {
     const isExist = await this.findByEmail(createUserDto.email);
 
     if (isExist) {
@@ -44,11 +41,11 @@ export class UsersService {
     return result;
   }
 
-  // async update(id: string, user: User) {
-  //   return (this.users[id] = user);
-  // }
+  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+    return this.userModel.findByIdAndUpdate(id, updateUserDto).exec();
+  }
 
-  // async delete(id: number) {
-  //   return this.users.splice(id, 1);
-  // }
+  async remove(id: string) {
+    return this.userModel.findByIdAndDelete(id);
+  }
 }

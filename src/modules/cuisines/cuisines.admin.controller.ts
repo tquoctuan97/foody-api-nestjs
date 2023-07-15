@@ -15,11 +15,10 @@ import { Cuisine } from './entities/cuisine.entity';
 import { ApiTags } from '@nestjs/swagger';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { PaginationParams } from 'src/common/pagination/pagination.model';
-import { Public } from '../auth/decorators/public.decorator';
 
-@Controller('api/v1/cuisines')
-@ApiTags('cuisines')
-export class CuisinesController {
+@Controller('api/v1/admin/cuisines')
+@ApiTags('admin/cuisines')
+export class CuisinesAdminController {
   constructor(private readonly cuisinesService: CuisinesService) {}
 
   @Post()
@@ -27,7 +26,6 @@ export class CuisinesController {
     return this.cuisinesService.create(createCuisineDto);
   }
 
-  @Public()
   @Get()
   findAll(
     @Query() params: PaginationParams,
@@ -35,7 +33,6 @@ export class CuisinesController {
     return this.cuisinesService.findAll(params);
   }
 
-  @Public()
   @Get(':id')
   findOne(@Param('id') id: string): Promise<Cuisine> {
     return this.cuisinesService.findOne(id);

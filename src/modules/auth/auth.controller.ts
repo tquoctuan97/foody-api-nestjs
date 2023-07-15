@@ -27,6 +27,6 @@ export class AuthController {
   @Get('profile')
   @ApiBearerAuth()
   getProfile(@Request() req) {
-    return req.user;
+    return this.authService.getProfile(req.user.id);
   }
 }

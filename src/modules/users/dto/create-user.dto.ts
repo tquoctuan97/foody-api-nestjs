@@ -38,6 +38,6 @@ export class CreateUserDto {
     enum: UserStatus,
     default: UserStatus.ACTIVE,
   })
-  @IsEnum(Role)
+  @IsEnum(UserStatus)
   status: string;
 }
