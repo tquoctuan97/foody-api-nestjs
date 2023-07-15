@@ -11,6 +11,8 @@ async function bootstrap() {
     .setTitle('Foody API')
     .setDescription('The foody API description')
     .setVersion('1.0')
+    .addBearerAuth()
+    .addSecurityRequirements('bearer')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

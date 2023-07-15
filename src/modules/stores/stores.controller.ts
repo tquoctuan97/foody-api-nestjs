@@ -14,6 +14,7 @@ import { UpdateStoreDto } from './dto/update-store.dto';
 import { ApiTags } from '@nestjs/swagger';
 import { StoreParams } from './models/store.model';
 import { PaginationParams } from 'src/common/pagination/pagination.model';
+import { Public } from '../auth/decorators/public.decorator';
 
 @Controller('api/v1/stores')
 @ApiTags('stores')
@@ -25,11 +26,13 @@ export class StoresController {
     return this.storesService.create(createStoreDto);
   }
 
+  @Public()
   @Get()
   findAll(@Query() params: StoreParams) {
     return this.storesService.findAll(params);
   }
 
+  @Public()
   @Get(':slug')
   findOne(@Param('slug') slug: string) {
     return this.storesService.findOne(slug);

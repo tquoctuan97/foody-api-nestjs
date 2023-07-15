@@ -1,12 +1,11 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-
 import { ProductsModule } from './modules/products/products.module';
 import { ConfigModule } from '@nestjs/config';
 import { StoresModule } from './modules/stores/stores.module';
 import { CuisinesModule } from './modules/cuisines/cuisines.module';
-import { TransformInterceptor } from './transform.interceptor';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { AuthModule } from './modules/auth/auth.module';
+import { UsersModule } from './modules/users/users.module';
 @Module({
   imports: [
     ProductsModule,
@@ -17,6 +16,8 @@ import { APP_INTERCEPTOR } from '@nestjs/core';
     MongooseModule.forRoot(process.env.CONNECTIONSTRING),
     StoresModule,
     CuisinesModule,
+    AuthModule,
+    UsersModule,
   ],
   // providers: [
   //   {
