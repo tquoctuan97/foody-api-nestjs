@@ -5,6 +5,7 @@ import {
   MinLength,
   IsEnum,
   IsOptional,
+  IsUrl,
 } from 'class-validator';
 import { StoreStatus } from '../models/store.model';
 import { Location } from '../entities/store.entity';
@@ -31,7 +32,7 @@ export class CreateStoreDto {
 
   @ApiProperty()
   @IsOptional()
-  @IsString()
+  @IsUrl(undefined, { message: 'Thumbnail URL is not valid.' })
   thumbnail: string;
 
   @ApiProperty()
