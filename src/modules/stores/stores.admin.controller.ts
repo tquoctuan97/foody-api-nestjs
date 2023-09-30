@@ -47,11 +47,11 @@ export class StoresAdminController {
     @Param('id') id: string,
     @Body() updateStoreDto: UpdateStoreDto,
   ) {
-    return this.storesService.update(id, updateStoreDto, req.user.id);
+    return this.storesService.update(id, updateStoreDto, req.user);
   }
 
   @Delete(':id')
   remove(@Request() req, @Param('id') id: string) {
-    return this.storesService.remove(id, req.user.id);
+    return this.storesService.remove(id, req.user);
   }
 }

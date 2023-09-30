@@ -120,10 +120,14 @@ export class StoresService {
       .exec();
   }
 
-  async update(id: string, updateStoreDto: UpdateStoreDto, ownerId: string) {
+  async update(
+    id: string,
+    updateStoreDto: UpdateStoreDto,
+    user: { id: string; role: Role },
+  ) {
     const store = await this.storeModel.findById(id);
 
-    if (store.owner.toString() !== ownerId) {
+    if (user.role !== Role.ADMIN && store.owner.toString() !== user.id) {
       throw new ForbiddenException();
     }
 
@@ -132,10 +136,10 @@ export class StoresService {
     return result;
   }
 
-  async remove(id: string, ownerId: string) {
+  async remove(id: string, user: { id: string; role: Role }) {
     const store = await this.storeModel.findById(id);
 
-    if (store.owner.toString() !== ownerId) {
+    if (user.role !== Role.ADMIN && store.owner.toString() !== user.id) {
       throw new ForbiddenException();
     }
 
