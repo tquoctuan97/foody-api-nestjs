@@ -1,13 +1,14 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { CreateStoreDto } from './dto/create-store.dto';
-import { UpdateStoreDto } from './dto/update-store.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
-import { Store } from './entities/store.entity';
 import slugify from 'slugify';
-import { StoreAdminParams, StoreStatus } from './models/store.model';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { generateRandomSlug } from 'src/utils';
 import { Role } from '../users/models/user.model';
+import { CreateStoreDto } from './dto/create-store.dto';
+import { UpdateStoreDto } from './dto/update-store.dto';
+import { Store } from './entities/store.entity';
+import { StoreAdminParams, StoreStatus } from './models/store.model';
 
 @Injectable()
 export class StoresService {
@@ -21,11 +22,7 @@ export class StoresService {
     const isExist = await this.storeModel.findOne({ slug });
 
     if (isExist) {
-      const count = await this.storeModel.countDocuments({
-        slug: new RegExp(`^${slug}(-[0-9]*)?$`, 'i'),
-      });
-
-      slug = `${slug}-${count + 1}`;
+      slug = `${slug}-${generateRandomSlug()}`;
     }
 
     const result = await this.storeModel.create({
