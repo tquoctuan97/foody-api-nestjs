@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, MinLength, IsEnum } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
 import { StoreStatus } from '../models/store.model';
 import { Location } from '../entities/store.entity';
 
@@ -24,6 +30,7 @@ export class CreateStoreDto {
   layout: number;
 
   @ApiProperty()
+  @IsOptional()
   @IsString()
   thumbnail: string;
 

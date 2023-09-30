@@ -33,15 +33,18 @@ export class Store extends Document {
   layout: number;
 
   @ApiProperty()
-  @Prop({ required: true })
+  @Prop({ default: null })
   thumbnail: string;
 
   @ApiProperty()
-  @Prop({ type: Object })
+  @Prop({ default: null, type: Object })
   location: Location;
 
   @ApiProperty()
-  @Prop({ type: [{ type: Types.ObjectId, ref: Cuisine.name }] })
+  @Prop({
+    default: [],
+    type: [{ type: Types.ObjectId, ref: Cuisine.name }],
+  })
   cuisines: Types.ObjectId[];
 
   @ApiProperty()

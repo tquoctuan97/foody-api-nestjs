@@ -30,7 +30,7 @@ export class StoresService {
 
     const result = await this.storeModel.create({
       ...createStoreDto,
-      cuisines: createStoreDto.cuisineIds.map((id) => new Types.ObjectId(id)),
+      cuisines: createStoreDto.cuisineIds?.map((id) => new Types.ObjectId(id)),
       slug,
       owner: new Types.ObjectId(ownerId),
     });
