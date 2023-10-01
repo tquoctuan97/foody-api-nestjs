@@ -6,6 +6,7 @@ import {
   Patch,
   Param,
   Delete,
+  Query,
 } from '@nestjs/common';
 
 import { ApiTags } from '@nestjs/swagger';
@@ -13,7 +14,8 @@ import { Public } from '../auth/decorators/public.decorator';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { User } from './entities/store.entity';
+import { User } from './entities/user.entity';
+import { UserParams } from './models/user.model';
 
 @Controller('api/v1/admin/users')
 @ApiTags('admin/users')
@@ -27,8 +29,8 @@ export class UsersController {
 
   @Public()
   @Get()
-  findAll() {
-    return this.usersService.findAll();
+  findAll(@Query() params: UserParams) {
+    return this.usersService.findAll(params);
   }
 
   @Public()

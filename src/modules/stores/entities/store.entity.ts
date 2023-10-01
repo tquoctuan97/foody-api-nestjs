@@ -4,7 +4,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { StoreStatus } from '../models/store.model';
 import { Cuisine } from 'src/modules/cuisines/entities/cuisine.entity';
 import { Min } from 'class-validator';
-import { User } from 'src/modules/users/entities/store.entity';
+import { User } from 'src/modules/users/entities/user.entity';
 
 export type Location = {
   address: string;

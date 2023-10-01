@@ -9,9 +9,6 @@ export enum StoreStatus {
 }
 
 export class StorePublicParams extends PaginationParams {
-  @ApiPropertyOptional()
-  status?: StoreStatus;
-
   @ApiPropertyOptional({
     description: 'Multiple use `|` OR',
   })
@@ -27,4 +24,9 @@ export class StoreAdminParams extends StorePublicParams {
     id: string;
     role: Role;
   };
+
+  @ApiPropertyOptional({
+    description: '`published` | `private` | `draft`',
+  })
+  status?: StoreStatus;
 }
