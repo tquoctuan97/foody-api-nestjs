@@ -1,13 +1,4 @@
-import { MinLength, Min } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-export class UpdateProductDto {
-  @ApiProperty()
-  @MinLength(5)
-  title: string;
+import { PartialType } from '@nestjs/swagger';
+import { CreateProductDto } from './create-product.dto';
 
-  @ApiProperty({
-    minimum: 1,
-  })
-  @Min(1)
-  price: number;
-}
+export class UpdateProductDto extends PartialType(CreateProductDto) {}
