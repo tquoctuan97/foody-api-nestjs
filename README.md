@@ -19,6 +19,12 @@ $ yarn run start:dev
 $ yarn run start:prod
 ```
 
+## Quick CLI
+
+```bash
+nest g resource [name]
+```
+
 ## Test
 
 ```bash
