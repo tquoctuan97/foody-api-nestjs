@@ -71,7 +71,7 @@ export class StoresService {
       .sort(query.sort || '-createdAt')
       .populate({
         path: 'cuisines',
-        transform: (cuisine) => ({ _id: cuisine._id, name: cuisine.name }),
+        transform: (cuisine) => ({ _id: cuisine?._id, name: cuisine?.name }),
       })
       .populate({
         path: 'owner',
