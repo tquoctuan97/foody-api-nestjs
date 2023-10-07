@@ -21,7 +21,7 @@ export class ProductCategory extends Document {
   imageUrl: string;
 
   @Prop({ type: Types.ObjectId, ref: Store.name })
-  storeId: Types.ObjectId;
+  store: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: User.name })
   createdBy: Types.ObjectId;

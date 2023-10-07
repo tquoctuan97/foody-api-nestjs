@@ -26,7 +26,7 @@ export class ProductCategoriesService {
       name: name.trim(),
       status,
       imageUrl,
-      storeId: new Types.ObjectId(storeId),
+      store: new Types.ObjectId(storeId),
       createdBy: new Types.ObjectId(user.id),
     });
 
@@ -40,6 +40,7 @@ export class ProductCategoriesService {
     const queryStore = {
       name: new RegExp(query?.search || '', 'i'),
       status: new RegExp(query?.status || '', 'i'),
+      store: new Types.ObjectId(query.storeId),
     };
 
     const totalCount = await this.productCategoryModel.countDocuments(
