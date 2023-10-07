@@ -4,6 +4,8 @@ import { Model, Types } from 'mongoose';
 import slugify from 'slugify';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { generateRandomSlug } from 'src/utils';
+import { ProductCategoriesService } from '../product-categories/product-categories.service';
+import { ProductsService } from '../products/products.service';
 import { Role } from '../users/models/user.model';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
@@ -14,6 +16,8 @@ import { StoreAdminParams, StoreStatus } from './models/store.model';
 export class StoresService {
   constructor(
     @InjectModel(Store.name) private readonly storeModel: Model<Store>,
+    private productsService: ProductsService,
+    private productCategoriesService: ProductCategoriesService,
   ) {}
 
   async create(createStoreDto: CreateStoreDto, ownerId: string) {
@@ -99,8 +103,8 @@ export class StoresService {
   }
 
   // return a store with cuisine name
-  async findOne(slug: string): Promise<Store> {
-    return this.storeModel
+  async findOne(slug: string): Promise<any> {
+    const store = await this.storeModel
       .findOne({ slug, status: StoreStatus.PUBLISHED })
       .populate({
         path: 'cuisines',
@@ -114,7 +118,32 @@ export class StoresService {
           avatar: user.avatar,
         }),
       })
+      .lean<any>()
       .exec();
+
+    if (!store) {
+      //not found
+      throw new ForbiddenException();
+    }
+
+    const products = await this.productsService.getPublishedProductListByStore(
+      store._id,
+    );
+
+    const categories =
+      await this.productCategoriesService.getPublishedProductCategoryListByStore(
+        store._id,
+      );
+
+    const menu = categories.map((category) => ({
+      ...category,
+      items: products.filter(
+        (product) =>
+          product.category._id.toString() === category._id.toString(),
+      ),
+    }));
+
+    return { ...store, menu };
   }
 
   async update(

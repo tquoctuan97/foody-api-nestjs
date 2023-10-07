@@ -6,7 +6,10 @@ import { Role } from '../users/models/user.model';
 import { CreateProductCategoryDto } from './dto/create-product-category.dto';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto';
 import { ProductCategory } from './entities/product-category.entity';
-import { ProductCategoryParams } from './models/product-category.model';
+import {
+  ProductCategoryParams,
+  ProductCategoryStatus,
+} from './models/product-category.model';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
@@ -66,6 +69,24 @@ export class ProductCategoriesService {
       // check if there is next page
       hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
     });
+
+    return response;
+  }
+
+  async getPublishedProductCategoryListByStore(storeId: string) {
+    const response = await this.productCategoryModel
+      .find({
+        status: ProductCategoryStatus.PUBLISHED,
+        store: new Types.ObjectId(storeId),
+      })
+      .sort('-createdAt')
+      .select('-createdAt')
+      .select('-updatedAt')
+      .select('-category')
+      .select('-store')
+      .select('-createdBy')
+      .lean<any>()
+      .exec();
 
     return response;
   }

@@ -4,7 +4,7 @@ import { UpdateProductDto } from './dto/update-product.dto';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Product } from './entities/product.entity';
-import { ProductCategoryParams } from './models/product.model';
+import { ProductCategoryParams, ProductStatus } from './models/product.model';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { UserRequest } from '../auth/models/auth.model';
 import { Role } from '../users/models/user.model';
@@ -66,6 +66,44 @@ export class ProductsService {
       // check if there is next page
       hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
     });
+
+    return response;
+  }
+
+  async getPublishedProductListByStore(storeId: string) {
+    const response = await this.productModel
+      .find({
+        status: ProductStatus.PUBLISHED,
+        store: new Types.ObjectId(storeId),
+      })
+      .sort('-createdAt')
+      .select('-createdAt')
+      .select('-updatedAt')
+      .select('-store')
+      .select('-createdBy')
+      // .populate({
+      //   path: 'category',
+      //   transform: (category) => ({
+      //     _id: category._id,
+      //     name: category.name,
+      //   }),
+      // })
+      // .populate({
+      //   path: 'store',
+      //   transform: (category) => ({
+      //     _id: category._id,
+      //     name: category.name,
+      //   }),
+      // })
+      // .populate({
+      //   path: 'createdBy',
+      //   transform: (user) => ({
+      //     _id: user._id,
+      //     name: user.name,
+      //   }),
+      // })
+      .lean<Product[]>()
+      .exec();
 
     return response;
   }
