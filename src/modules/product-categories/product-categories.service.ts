@@ -20,12 +20,12 @@ export class ProductCategoriesService {
     user: UserRequest,
     CreateProductCategoryDto: CreateProductCategoryDto,
   ) {
-    const { name, status, imageURL, storeId } = CreateProductCategoryDto;
+    const { name, status, imageUrl, storeId } = CreateProductCategoryDto;
 
     const newProductCategory = new this.productCategoryModel({
       name: name.trim(),
       status,
-      imageURL,
+      imageUrl,
       storeId: new Types.ObjectId(storeId),
       createdBy: new Types.ObjectId(user.id),
     });

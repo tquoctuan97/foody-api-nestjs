@@ -20,7 +20,7 @@ export class CreateProductCategoryDto {
     required: false,
     default: '',
   })
-  imageURL: string;
+  imageUrl: string;
 
   @ApiProperty()
   storeId: string;

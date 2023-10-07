@@ -18,7 +18,7 @@ export class ProductCategory extends Document {
   status: string;
 
   @Prop({ required: false, default: '' })
-  imageURL: string;
+  imageUrl: string;
 
   @Prop({ type: Types.ObjectId, ref: Store.name })
   storeId: Types.ObjectId;
