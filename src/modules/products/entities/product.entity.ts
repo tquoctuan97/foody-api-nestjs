@@ -16,6 +16,11 @@ export class Product extends Document {
   description: string;
 
   @Prop({
+    min: 0,
+  })
+  price: number;
+
+  @Prop({
     enum: Object.values(ProductStatus),
     default: ProductStatus.PUBLISHED,
   })

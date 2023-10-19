@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  Patch,
   Post,
   Put,
   Query,
@@ -35,7 +36,7 @@ export class ProductsController {
     return this.productsService.create(req.user, createProductDto);
   }
 
-  @Put(':id')
+  @Patch(':id')
   update(
     @Request() req,
     @Param('id') id: string,

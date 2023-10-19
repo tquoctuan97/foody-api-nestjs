@@ -113,8 +113,8 @@ export class ProductsService {
       createProductDto;
 
     const newProduct = new this.productModel({
-      name: name.trim(),
-      description: description.trim(),
+      name,
+      description,
       price,
       imageUrl,
       status,
@@ -142,10 +142,9 @@ export class ProductsService {
       throw new ForbiddenException();
     }
 
-    return this.productModel.findByIdAndUpdate(id, {
-      title: updateProductDto.name.trim(),
-      price: updateProductDto.price,
-    });
+    return this.productModel
+      .findByIdAndUpdate(id, updateProductDto, { new: true })
+      .exec();
   }
 
   async delete(user: UserRequest, id: string) {
