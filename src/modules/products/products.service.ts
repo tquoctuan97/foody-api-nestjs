@@ -29,9 +29,9 @@ export class ProductsService {
 
     const data = await this.productModel
       .find(queryStore)
+      .sort(query.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .sort(query.sort || '-createdAt')
       .populate({
         path: 'category',
         transform: (category) => ({

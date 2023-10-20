@@ -52,9 +52,9 @@ export class ProductCategoriesService {
 
     const data = await this.productCategoryModel
       .find(queryStore)
+      .sort(query.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .sort(query.sort || '-createdAt')
       .select('-store')
       .lean<ProductCategory[]>()
       .exec();

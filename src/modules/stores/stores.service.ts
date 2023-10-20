@@ -70,9 +70,9 @@ export class StoresService {
 
     const data = await this.storeModel
       .find(queryStore)
+      .sort(query.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .sort(query.sort || '-createdAt')
       .populate({
         path: 'cuisines',
         transform: (cuisine) => ({ _id: cuisine?._id, name: cuisine?.name }),
