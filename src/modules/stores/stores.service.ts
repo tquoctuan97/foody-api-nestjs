@@ -135,15 +135,15 @@ export class StoresService {
         store._id,
       );
 
-    const menu = categories.map((category) => ({
-      ...category,
-      items: products.filter(
-        (product) =>
-          product.category._id.toString() === category._id.toString(),
-      ),
-    }));
+    // const menu = categories.map((category) => ({
+    //   ...category,
+    //   items: products.filter(
+    //     (product) =>
+    //       product.category._id.toString() === category._id.toString(),
+    //   ),
+    // }));
 
-    return { ...store, menu };
+    return { ...store, menu: { categories, products } };
   }
 
   async update(
