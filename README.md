@@ -188,3 +188,7 @@ A JSON error body should provide a few things for the developer - a useful error
   }
 }
 ```
+
+## CI/CD
+
+Server will auto deploy when `push` or `pull request` to branch `main`
