@@ -1,0 +1,29 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: SSH and SCP
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            nvm use v21.1.0
+            export PATH="/root/.nvm/versions/node/v21.1.0/bin:$PATH"
+            cd /home/ubuntu/foody-api-nestjs
+            git pull -f
+            yarn install
+            pm2 restart foody-api
