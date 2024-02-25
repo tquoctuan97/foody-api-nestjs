@@ -67,18 +67,25 @@ export class UsersService {
       throw new Error('Email is already exists');
     }
 
-    const password = await hashPassword(createUserDto.password);
+    const hashedPassword = await hashPassword(createUserDto.password);
 
     const result = await this.userModel.create({
       ...createUserDto,
-      password,
+      password: hashedPassword,
     });
 
     return result;
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
-    return this.userModel.findByIdAndUpdate(id, updateUserDto).exec();
+    const hashedPassword = await hashPassword(updateUserDto.password);
+
+    return this.userModel
+      .findByIdAndUpdate(id, {
+        ...updateUserDto,
+        password: hashedPassword,
+      })
+      .exec();
   }
 
   async remove(id: string) {

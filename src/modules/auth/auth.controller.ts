@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { Public } from './decorators/public.decorator';
-import { SignInDto } from './dto/sign-in.dto';
+import { ChangePasswordDto, SignInDto } from './dto/sign-in.dto';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 
 @ApiTags('auth')
@@ -22,6 +22,13 @@ export class AuthController {
   @Post('login')
   signIn(@Body() signInDto: SignInDto) {
     return this.authService.signIn(signInDto.email, signInDto.password);
+  }
+
+  @Post('change-password')
+  @ApiBearerAuth()
+  changePassword(@Request() req, @Body() changePasswordDto: ChangePasswordDto) {
+    console.log({ user: req.user });
+    return this.authService.changePassword(req.user.email, changePasswordDto);
   }
 
   @Get('profile')

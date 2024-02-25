@@ -7,3 +7,14 @@ export class SignInDto {
   @ApiProperty()
   password: string;
 }
+
+export class ChangePasswordDto {
+  @ApiProperty()
+  oldPassword: string;
+
+  @ApiProperty()
+  newPassword: string;
+
+  @ApiProperty()
+  confirmPassword: string;
+}
