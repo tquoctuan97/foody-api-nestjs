@@ -14,7 +14,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Foody API')
     .setDescription('The foody API description')
-    .setVersion('1.0')
+    .setVersion('1.1.0')
     .addBearerAuth()
     .addSecurityRequirements('bearer')
     .build();
