@@ -7,6 +7,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { ProductsModule } from './modules/products/products.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
+import { BillsModule } from './modules/bills/bills.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -20,6 +21,7 @@ import { ProductCategoriesModule } from './modules/product-categories/product-ca
     AuthModule,
     UsersModule,
     ProductCategoriesModule,
+    BillsModule,
   ],
   // providers: [
   //   {
