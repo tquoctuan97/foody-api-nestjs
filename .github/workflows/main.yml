@@ -26,4 +26,5 @@ jobs:
             cd /home/ubuntu/foody-api-nestjs
             git pull -f
             yarn install
+            yarn build
             pm2 restart foody-api
