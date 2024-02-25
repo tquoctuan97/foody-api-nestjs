@@ -1,4 +1,8 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
@@ -19,8 +23,19 @@ export class BillsService {
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
 
+    const queryBillDate = new Date(query?.billDate);
+
+    if (isNaN(queryBillDate.getTime())) {
+      throw new BadRequestException('billDate must be a valid date');
+    }
+
     const queryBill = {
       customerName: new RegExp(query?.search || '', 'i'),
+      ...(queryBillDate && {
+        billDate: {
+          $eq: queryBillDate,
+        },
+      }),
       deletedAt: null,
     };
 
