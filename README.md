@@ -192,3 +192,17 @@ A JSON error body should provide a few things for the developer - a useful error
 ## CI/CD
 
 Server will auto deploy when `push` or `pull request` to branch `main`
+
+### Start an app with pm2
+
+PM2 is a daemon process manager that will help you manage and keep your application online.
+
+```bash
+pm2 start ./dist/main.js --name foody-api
+```
+
+### Restart pm2
+
+```bash
+pm2 restart foody-api
+```
