@@ -23,9 +23,9 @@ export class BillsService {
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
 
-    const queryBillDate = new Date(query?.billDate);
+    const queryBillDate = query?.billDate && new Date(query?.billDate);
 
-    if (isNaN(queryBillDate.getTime())) {
+    if (query?.billDate && isNaN(queryBillDate.getTime())) {
       throw new BadRequestException('billDate must be a valid date');
     }
 
