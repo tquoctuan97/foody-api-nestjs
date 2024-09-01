@@ -4,7 +4,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { FilterQuery, Model } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { UserRequest } from '../auth/models/auth.model';
 import { Role } from '../users/models/user.model';
@@ -29,21 +29,19 @@ export class BillsService {
       throw new BadRequestException('billDate must be a valid date');
     }
 
-    const queryBill = {
+    const queryBill: FilterQuery<Bill> = {
       customerName: new RegExp(query?.search || '', 'i'),
-      ...(queryBillDate && {
-        billDate: {
-          $eq: queryBillDate,
-        },
-      }),
-      deletedAt: null,
+      ...(queryBillDate && { billDate: queryBillDate }),
+      ...(query?.isDeleted
+        ? { deletedAt: { $ne: null } }
+        : { deletedAt: null }),
     };
 
     const totalCount = await this.billModel.countDocuments(queryBill);
 
     const data = await this.billModel
       .find(queryBill)
-      .sort(query.sort || '-createdAt')
+      .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
       .lean<Bill[]>()
