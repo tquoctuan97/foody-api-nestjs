@@ -19,7 +19,7 @@ import { BillParams } from './models/bill.model';
 import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
 
 @Controller('api/v1/admin/bills')
-@ApiTags('admin/bills')
+@ApiTags('bill-maker/bills')
 export class BillsController {
   constructor(private readonly billsService: BillsService) {}
 
