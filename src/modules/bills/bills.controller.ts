@@ -16,6 +16,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
 import { BillParams } from './models/bill.model';
+import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
 
 @Controller('api/v1/admin/bills')
 @ApiTags('admin/bills')
@@ -33,7 +34,7 @@ export class BillsController {
   }
 
   @Get(':id')
-  getOne(@Param('id') id: string) {
+  getOne(@Param('id', IsObjectIdPipe) id: string) {
     return this.billsService.getOne(id);
   }
 
@@ -48,14 +49,14 @@ export class BillsController {
   @Patch(':id')
   update(
     @Request() req,
-    @Param('id') id: string,
+    @Param('id', IsObjectIdPipe) id: string,
     @Body() updateBillDto: UpdateBillDto,
   ) {
     return this.billsService.update(req.user, id, updateBillDto);
   }
 
   @Delete(':id')
-  delete(@Request() req, @Param('id') id: string) {
+  delete(@Request() req, @Param('id', IsObjectIdPipe) id: string) {
     return this.billsService.delete(req.user, id);
   }
 }
