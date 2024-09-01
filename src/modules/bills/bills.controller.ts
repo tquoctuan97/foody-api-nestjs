@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
@@ -22,7 +23,12 @@ export class BillsController {
   constructor(private readonly billsService: BillsService) {}
 
   @Get()
-  getAll(@Query() query: BillParams) {
+  getAll(
+    @Query() query: BillParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    query.isDeleted = isDeleted;
     return this.billsService.getAll(query);
   }
 

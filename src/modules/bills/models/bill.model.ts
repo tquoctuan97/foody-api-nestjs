@@ -6,4 +6,8 @@ export class BillParams extends PaginationParams {
     description: '2024-01-01T00:00:00.000Z',
   })
   billDate?: string;
+  @ApiPropertyOptional({
+    description: 'get deleted bill list',
+  })
+  isDeleted?: boolean;
 }
