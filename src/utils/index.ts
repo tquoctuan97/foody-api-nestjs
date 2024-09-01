@@ -8,6 +8,8 @@ export const generateRandomSlug = (length = 5) => {
 };
 
 export function convertVietnameseToSlug(title: string) {
+  if (!title) return '';
+
   //Đổi chữ hoa thành chữ thường
   let slug = title.toLowerCase();
 
