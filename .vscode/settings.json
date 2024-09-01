@@ -1,0 +1,9 @@
+{
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "editor.tabSize": 2,
+  "[markdown]": {
+    "editor.formatOnSave": false
+  },
+  "prettier.prettierPath": "./node_modules/prettier"
+}
