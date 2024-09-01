@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { BillItem } from '../dto/create-bill.dto';
 import { User } from 'src/modules/users/entities/user.entity';
+import { Customer } from 'src/modules/customers/entities/customer.entity';
 
 @Schema({ timestamps: true, versionKey: false })
 export class Bill extends Document {
@@ -10,6 +11,9 @@ export class Bill extends Document {
 
   @Prop({ required: true })
   customerName: string;
+
+  @Prop({ type: Types.ObjectId, ref: Customer.name, default: null })
+  customerId: string;
 
   @Prop({ required: true })
   billList: BillItem[];

@@ -37,6 +37,12 @@ export class CreateBillDto {
   customerName: string;
 
   @ApiProperty({
+    required: false,
+    type: String,
+  })
+  customerId: string;
+
+  @ApiProperty({
     required: true,
     type: [BillItem],
   })

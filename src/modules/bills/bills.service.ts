@@ -47,6 +47,15 @@ export class BillsService {
       .limit(pageSize)
       .populate([
         {
+          path: 'customerId',
+          transform: (customer) => ({
+            _id: customer._id,
+            name: customer.name,
+            displayName: customer.displayName,
+            phoneNumber: customer.phoneNumber,
+          }),
+        },
+        {
           path: 'createdBy',
           transform: (user) => ({
             _id: user._id,
@@ -94,6 +103,15 @@ export class BillsService {
 
     return bill.populate([
       {
+        path: 'customerId',
+        transform: (customer) => ({
+          _id: customer._id,
+          name: customer.name,
+          displayName: customer.displayName,
+          phoneNumber: customer.phoneNumber,
+        }),
+      },
+      {
         path: 'createdBy',
         transform: (user) => ({
           _id: user._id,
@@ -118,13 +136,22 @@ export class BillsService {
   }
 
   async create(user: UserRequest, createBillDto: CreateBillDto) {
-    const { billDate, billList, customerName, debt, finalResult, prePay, sum } =
-      createBillDto;
+    const {
+      billDate,
+      billList,
+      customerName,
+      customerId,
+      debt,
+      finalResult,
+      prePay,
+      sum,
+    } = createBillDto;
 
     const newBill = new this.billModel({
       billDate,
       billList,
       customerName,
+      customerId,
       debt,
       finalResult,
       prePay,
@@ -135,6 +162,15 @@ export class BillsService {
     await newBill.save();
 
     return newBill.populate([
+      {
+        path: 'customerId',
+        transform: (customer) => ({
+          _id: customer._id,
+          name: customer.name,
+          displayName: customer.displayName,
+          phoneNumber: customer.phoneNumber,
+        }),
+      },
       {
         path: 'createdBy',
         transform: (user) => ({
@@ -174,13 +210,24 @@ export class BillsService {
 
     await bill.set({ ...updateBillDto, updatedBy: user.id }).save();
 
-    return bill.populate({
-      path: 'updatedBy',
-      transform: (user) => ({
-        _id: user._id,
-        name: user.name,
-      }),
-    });
+    return bill.populate([
+      {
+        path: 'customerId',
+        transform: (customer) => ({
+          _id: customer._id,
+          name: customer.name,
+          displayName: customer.displayName,
+          phoneNumber: customer.phoneNumber,
+        }),
+      },
+      {
+        path: 'updatedBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+    ]);
   }
 
   async delete(user: UserRequest, id: string) {
