@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model } from 'mongoose';
@@ -44,6 +45,29 @@ export class BillsService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
+      .populate([
+        {
+          path: 'createdBy',
+          transform: (user) => ({
+            _id: user._id,
+            name: user.name,
+          }),
+        },
+        {
+          path: 'updatedBy',
+          transform: (user) => ({
+            _id: user._id,
+            name: user.name,
+          }),
+        },
+        {
+          path: 'deletedBy',
+          transform: (user) => ({
+            _id: user._id,
+            name: user.name,
+          }),
+        },
+      ])
       .lean<Bill[]>()
       .exec();
 
@@ -62,7 +86,35 @@ export class BillsService {
   }
 
   async getOne(id: string) {
-    return this.billModel.findById(id).exec();
+    const bill = await this.billModel.findById(id).exec();
+
+    if (!bill) {
+      throw new NotFoundException(`Bill ${id} is not found`);
+    }
+
+    return bill.populate([
+      {
+        path: 'createdBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+      {
+        path: 'updatedBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+      {
+        path: 'deletedBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+    ]);
   }
 
   async create(user: UserRequest, createBillDto: CreateBillDto) {
@@ -80,32 +132,81 @@ export class BillsService {
       createdBy: user.id,
     });
 
-    const result = await newBill.save();
+    await newBill.save();
 
-    return result;
+    return newBill.populate([
+      {
+        path: 'createdBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+      {
+        path: 'updatedBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+      {
+        path: 'deletedBy',
+        transform: (user) => ({
+          _id: user._id,
+          name: user.name,
+        }),
+      },
+    ]);
   }
 
   async update(user: UserRequest, id: string, updateBillDto: UpdateBillDto) {
-    const bill = await this.billModel.findById(id);
+    const bill = await this.getOne(id);
 
     if (user.role !== Role.ADMIN && bill.createdBy.toString() !== user.id) {
-      throw new ForbiddenException();
+      throw new ForbiddenException(
+        'You do not have permission to update this bill',
+      );
     }
 
-    return this.billModel
-      .findByIdAndUpdate(id, updateBillDto, { new: true })
-      .exec();
+    if (bill.deletedAt) {
+      throw new ForbiddenException("Can't update deleted bill");
+    }
+
+    await bill.set({ ...updateBillDto, updatedBy: user.id }).save();
+
+    return bill.populate({
+      path: 'updatedBy',
+      transform: (user) => ({
+        _id: user._id,
+        name: user.name,
+      }),
+    });
   }
 
   async delete(user: UserRequest, id: string) {
-    const bill = await this.billModel.findById(id);
+    const bill = await this.getOne(id);
+
+    console.log({ bill });
 
     if (user.role !== Role.ADMIN && bill.createdBy.toString() !== user.id) {
-      throw new ForbiddenException();
+      throw new ForbiddenException(
+        'You do not have permission to delete this bill',
+      );
     }
 
-    return this.billModel.findByIdAndUpdate(id, {
-      deletedAt: new Date().toISOString(),
+    await bill
+      .set({
+        deletedAt: new Date().toISOString(),
+        deletedBy: user.id,
+      })
+      .save();
+
+    return bill.populate({
+      path: 'deletedBy',
+      transform: (user) => ({
+        _id: user._id,
+        name: user.name,
+      }),
     });
   }
 }

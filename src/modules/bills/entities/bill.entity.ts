@@ -29,6 +29,12 @@ export class Bill extends Document {
   @Prop({ type: Types.ObjectId, ref: User.name })
   createdBy: Types.ObjectId;
 
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  updatedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  deletedBy: Types.ObjectId;
+
   @Prop({ required: false, default: null })
   deletedAt: Date | null;
 }
