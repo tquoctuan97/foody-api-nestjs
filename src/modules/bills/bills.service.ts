@@ -13,6 +13,7 @@ import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
 import { BillParams } from './models/bill.model';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class BillsService {
@@ -94,7 +95,7 @@ export class BillsService {
         },
         ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
           path,
-          transform: (user) => ({
+          transform: (user: User) => ({
             _id: user._id,
             name: user.name,
           }),
@@ -168,6 +169,7 @@ export class BillsService {
       finalResult,
       prePay,
       sum,
+      adjustmentList,
     } = createBillDto;
 
     const newBill = new this.billModel({
@@ -179,6 +181,7 @@ export class BillsService {
       finalResult,
       prePay,
       sum,
+      adjustmentList,
       createdBy: user.id,
     });
 
@@ -194,27 +197,13 @@ export class BillsService {
           phoneNumber: customer.phoneNumber,
         }),
       },
-      {
-        path: 'createdBy',
-        transform: (user) => ({
+      ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
+        path,
+        transform: (user: User) => ({
           _id: user._id,
           name: user.name,
         }),
-      },
-      {
-        path: 'updatedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'deletedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
+      })),
     ]);
   }
 

@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
-import { BillItem } from '../dto/create-bill.dto';
+import { AdjustmentItem, BillItem } from '../dto/create-bill.dto';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Customer } from 'src/modules/customers/entities/customer.entity';
 
@@ -26,6 +26,9 @@ export class Bill extends Document {
 
   @Prop({ required: false, default: null })
   prePay: number | null;
+
+  @Prop({ required: false, default: [] })
+  adjustmentList: AdjustmentItem[];
 
   @Prop({ required: true })
   finalResult: number;
