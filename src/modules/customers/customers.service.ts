@@ -25,8 +25,10 @@ export class CustomersService {
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
 
+    const decodedSearch = decodeURI(query?.search || '');
+
     const queryCustomer: FilterQuery<Customer> = {
-      slug: new RegExp(convertVietnameseToSlug(query?.search) || '', 'i'),
+      slug: new RegExp(convertVietnameseToSlug(decodedSearch) || '', 'i'),
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
