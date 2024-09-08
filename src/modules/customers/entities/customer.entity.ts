@@ -4,13 +4,13 @@ import { User } from 'src/modules/users/entities/user.entity';
 
 @Schema({ timestamps: true, versionKey: false })
 export class Customer extends Document {
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   name: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, trim: true })
   displayName: string;
 
-  @Prop({ required: false, default: null })
+  @Prop({ required: false, trim: true, default: null })
   phoneNumber: number | null;
 
   @Prop({ required: true })

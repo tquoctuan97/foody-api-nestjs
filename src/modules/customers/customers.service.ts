@@ -179,7 +179,9 @@ export class CustomersService {
       throw new ForbiddenException("Can't update deleted customer");
     }
 
-    await this.checkCustomerNameExist(updateCustomerDto.name);
+    if (customer.name !== updateCustomerDto.name.trim()) {
+      await this.checkCustomerNameExist(updateCustomerDto.name);
+    }
 
     await customer
       .set({
