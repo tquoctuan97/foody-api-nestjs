@@ -20,19 +20,56 @@ export class BillsService {
     @InjectModel(Bill.name) private readonly billModel: Model<Bill>,
   ) {}
 
+  private validateAndParseDates(query: BillParams): {
+    billDate?: string;
+    billDateFrom?: string;
+    billDateTo?: string;
+  } {
+    const dates: Pick<BillParams, 'billDate' | 'billDateFrom' | 'billDateTo'> =
+      ['billDate', 'billDateFrom', 'billDateTo'].reduce((acc, key) => {
+        if (query[key]) {
+          const date = new Date(query[key]);
+          if (isNaN(date.getTime())) {
+            throw new BadRequestException(`${key} must be a valid date`);
+          }
+          acc[key] = date;
+        }
+        return acc;
+      }, {});
+
+    if (
+      dates.billDateFrom &&
+      dates.billDateTo &&
+      dates.billDateFrom > dates.billDateTo
+    ) {
+      throw new BadRequestException(
+        'billDateFrom cannot be greater than billDateTo',
+      );
+    }
+
+    if ((dates.billDateFrom || dates.billDateTo) && dates.billDate) {
+      throw new BadRequestException(
+        'billDate cannot be used with billDateFrom or billDateTo',
+      );
+    }
+
+    return dates;
+  }
+
   async getAll(query: BillParams) {
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
 
-    const queryBillDate = query?.billDate && new Date(query?.billDate);
-
-    if (query?.billDate && isNaN(queryBillDate.getTime())) {
-      throw new BadRequestException('billDate must be a valid date');
-    }
+    const { billDate, billDateFrom, billDateTo } =
+      this.validateAndParseDates(query);
 
     const queryBill: FilterQuery<Bill> = {
       customerName: new RegExp(query?.search || '', 'i'),
-      ...(queryBillDate && { billDate: queryBillDate }),
+      ...(billDate && { billDate }),
+      ...(billDateFrom && { billDate: { $gte: billDateFrom } }),
+      ...(billDateTo && { billDate: { $lte: billDateTo } }),
+      ...(billDateFrom &&
+        billDateTo && { billDate: { $gte: billDateFrom, $lte: billDateTo } }),
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
@@ -55,27 +92,13 @@ export class BillsService {
             phoneNumber: customer.phoneNumber,
           }),
         },
-        {
-          path: 'createdBy',
+        ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
+          path,
           transform: (user) => ({
             _id: user._id,
             name: user.name,
           }),
-        },
-        {
-          path: 'updatedBy',
-          transform: (user) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        },
-        {
-          path: 'deletedBy',
-          transform: (user) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        },
+        })),
       ])
       .lean<Bill[]>()
       .exec();
