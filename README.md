@@ -84,7 +84,7 @@ GET /stores?cuisine=1|2
 Filter by time range:
 
 ```
-GET /stores?time=fromTime-toTime
+GET /stores?timeFrom=time&timeTo=time
 ```
 
 Search:
