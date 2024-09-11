@@ -59,4 +59,9 @@ export class BillsController {
   delete(@Request() req, @Param('id', IsObjectIdPipe) id: string) {
     return this.billsService.delete(req.user, id);
   }
+
+  @Get('/latest/:customerId')
+  getLatestBill(@Param('customerId') customerId: string) {
+    return this.billsService.getLatestBill(customerId);
+  }
 }
