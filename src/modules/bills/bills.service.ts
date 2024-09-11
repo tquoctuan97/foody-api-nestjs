@@ -179,13 +179,13 @@ export class BillsService {
       billDate,
       billList,
       customerName,
-      customerId,
+      customerId: new Types.ObjectId(customerId),
       debt,
       finalResult,
       prePay,
       sum,
       adjustmentList,
-      createdBy: user.id,
+      createdBy: new Types.ObjectId(user.id),
     });
 
     await newBill.save();
@@ -223,7 +223,9 @@ export class BillsService {
       throw new ForbiddenException("Can't update deleted bill");
     }
 
-    await bill.set({ ...updateBillDto, updatedBy: user.id }).save();
+    await bill
+      .set({ ...updateBillDto, updatedBy: new Types.ObjectId(user.id) })
+      .save();
 
     return bill.populate([
       {
@@ -248,8 +250,6 @@ export class BillsService {
   async delete(user: UserRequest, id: string) {
     const bill = await this.getOne(id);
 
-    console.log({ bill });
-
     if (user.role !== Role.ADMIN && bill.createdBy.toString() !== user.id) {
       throw new ForbiddenException(
         'You do not have permission to delete this bill',
@@ -259,7 +259,7 @@ export class BillsService {
     await bill
       .set({
         deletedAt: new Date().toISOString(),
-        deletedBy: user.id,
+        deletedBy: new Types.ObjectId(user.id),
       })
       .save();
 
