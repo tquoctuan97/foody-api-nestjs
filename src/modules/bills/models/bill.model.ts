@@ -19,4 +19,8 @@ export class BillParams extends PaginationParams {
     description: 'get deleted bill list',
   })
   isDeleted?: boolean;
+  @ApiPropertyOptional({
+    description: 'get bill list by customer id',
+  })
+  customerId?: string;
 }

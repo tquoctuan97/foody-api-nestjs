@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model } from 'mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { UserRequest } from '../auth/models/auth.model';
 import { Role } from '../users/models/user.model';
@@ -66,6 +66,9 @@ export class BillsService {
 
     const queryBill: FilterQuery<Bill> = {
       customerName: new RegExp(query?.search || '', 'i'),
+      ...(query?.customerId && {
+        customerId: new Types.ObjectId(query.customerId),
+      }),
       ...(billDate && { billDate }),
       ...(billDateFrom && { billDate: { $gte: billDateFrom } }),
       ...(billDateTo && { billDate: { $lte: billDateTo } }),
@@ -269,11 +272,17 @@ export class BillsService {
     });
   }
 
-  async getLatestBill(customerId: string): Promise<Bill | null> {
-    return this.billModel
-      .findOne({ customerId })
+  async getLatestBill(customerId: string): Promise<Bill | { message: string }> {
+    const latestBill = await this.billModel
+      .findOne({
+        customerId: new Types.ObjectId(customerId),
+        deletedAt: null,
+      })
       .sort({ billDate: -1 }) // Sắp xếp giảm dần theo billDate
       .sort({ createdAt: -1 }) // Sắp xếp giảm dần theo billDate
+      .lean() // Use lean for better performance if we don't need a full Mongoose document
       .exec();
+
+    return latestBill || null;
   }
 }
