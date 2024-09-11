@@ -274,15 +274,15 @@ export class BillsService {
 
   async getLatestBill(customerId: string): Promise<Bill | { message: string }> {
     const latestBill = await this.billModel
-      .findOne({
+      .find({
         customerId: new Types.ObjectId(customerId),
         deletedAt: null,
       })
-      .sort({ billDate: -1 }) // Sắp xếp giảm dần theo billDate
-      .sort({ createdAt: -1 }) // Sắp xếp giảm dần theo billDate
+      .sort('-createdAt')
+      .limit(1)
       .lean() // Use lean for better performance if we don't need a full Mongoose document
       .exec();
 
-    return latestBill || null;
+    return latestBill[0] || null;
   }
 }
