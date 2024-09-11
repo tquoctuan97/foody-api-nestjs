@@ -9,6 +9,7 @@ import { ProductsModule } from './modules/products/products.module';
 import { ProductCategoriesModule } from './modules/product-categories/product-categories.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { InsightModule } from './modules/insight/insight.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -24,6 +25,7 @@ import { CustomersModule } from './modules/customers/customers.module';
     ProductCategoriesModule,
     BillsModule,
     CustomersModule,
+    InsightModule,
   ],
   // providers: [
   //   {

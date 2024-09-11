@@ -272,8 +272,8 @@ export class BillsService {
   async getLatestBill(customerId: string): Promise<Bill | null> {
     return this.billModel
       .findOne({ customerId })
-      .sort({ billDate: -1 })  // Sắp xếp giảm dần theo billDate
-      .sort({ createddAt: -1 })  // Sắp xếp giảm dần theo billDate
+      .sort({ billDate: -1 }) // Sắp xếp giảm dần theo billDate
+      .sort({ createdAt: -1 }) // Sắp xếp giảm dần theo billDate
       .exec();
   }
 }
