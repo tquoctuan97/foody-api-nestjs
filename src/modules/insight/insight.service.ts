@@ -57,6 +57,9 @@ export class InsightService {
           items: top ? { $slice: ['$items', Number(top)] } : '$items',
         },
       },
+      {
+        $sort: { year: 1, month: 1 },
+      },
     ];
 
     return this.billModel.aggregate(pipeline).exec();
@@ -109,36 +112,41 @@ export class InsightService {
       .exec();
   }
 
-  async getCustomerOverview(customerId: string): Promise<any> {
+  async getCustomerOverview(
+    customerId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<any> {
+    const matchStage: any = {
+      customerId: new Types.ObjectId(customerId),
+      deletedAt: null,
+      ...(from && to && { billDate: { $gte: from, $lte: to } }), // Filter by date if from and to are provided
+    };
+
     const customerBills = await this.billModel
       .aggregate([
         {
-          $match: {
-            customerId: new Types.ObjectId(customerId),
-            deletedAt: null,
-          },
-        }, // Tìm tất cả các bill của customerId
-        { $unwind: '$billList' }, // Phân rã billList để xử lý từng món hàng
+          $match: matchStage, // Apply date range filter here
+        },
+        { $unwind: '$billList' }, // Handle each billList item
         {
           $group: {
-            _id: '$customerId', // Nhóm theo customerId
-            billCount: { $sum: 1 }, // Đếm số lượng bill
+            _id: '$customerId',
+            billCount: { $sum: 1 },
             totalSpent: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] }, // Tổng cộng số lượng * giá của các sản phẩm
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
             },
           },
         },
       ])
       .exec();
+
     const customerPaid = await this.billModel
       .aggregate([
         {
-          $match: {
-            customerId: new Types.ObjectId(customerId),
-            deletedAt: null,
-          },
-        }, // Tìm tất cả các bill của customerId
-        { $unwind: '$adjustmentList' }, // Phân rã adjustmentList trong mỗi bill
+          $match: matchStage, // Apply the same date range filter here
+        },
+        { $unwind: '$adjustmentList' },
         {
           $match: {
             'adjustmentList.name': 'Gởi',
@@ -147,24 +155,20 @@ export class InsightService {
         },
         {
           $group: {
-            _id: '$customerId', // Nhóm theo customerId
-            totalPaid: { $sum: '$adjustmentList.amount' }, // Tính tổng đã trả từ adjustmentList
+            _id: '$customerId',
+            totalPaid: { $sum: '$adjustmentList.amount' },
           },
         },
       ])
       .exec();
 
-    // Lấy bill gần nhất để kiểm tra nợ (debt)
+    // Find the latest bill within the date range if applicable
     const latestBill = await this.billModel
-      .findOne({ customerId: new Types.ObjectId(customerId), deletedAt: null })
+      .findOne(matchStage)
       .sort({ billDate: -1, createdAt: -1 })
       .exec();
 
-    // Lấy nợ từ "Toa cũ" trong adjustmentList nếu có
-    const debtAdjustment = latestBill?.adjustmentList?.find(
-      (adjustment) => adjustment.name === 'Toa cũ' && adjustment.type === 'add',
-    );
-    const totalDebt = debtAdjustment?.amount || 0;
+    const totalDebt = latestBill?.finalResult || 0;
     const totalPaid = customerPaid[0]?.totalPaid || 0;
     const totalSpent = customerBills[0]?.totalSpent || 0;
     const billCount = customerBills[0]?.billCount || 0;
@@ -177,6 +181,129 @@ export class InsightService {
       totalPaid,
       totalResult,
     };
+  }
+
+  async getCustomerOverviewByMonth(
+    customerId: string,
+    from?: Date,
+    to?: Date,
+  ): Promise<any> {
+    const matchStage: any = {
+      customerId: new Types.ObjectId(customerId),
+      deletedAt: null,
+      ...(from && to && { billDate: { $gte: from, $lte: to } }), // Filter by date if from and to are provided
+    };
+
+    const monthlyOverview = await this.billModel
+      .aggregate([
+        {
+          $match: matchStage, // Apply date range filter here
+        },
+        { $unwind: '$billList' },
+        {
+          $group: {
+            _id: {
+              month: { $month: '$billDate' },
+              year: { $year: '$billDate' },
+            },
+            billCount: { $sum: 1 },
+            totalSpent: {
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+            },
+            latestBill: { $last: '$$ROOT' }, // Get the latest bill for each month
+          },
+        },
+        {
+          $lookup: {
+            from: 'bills',
+            localField: 'latestBill._id',
+            foreignField: '_id',
+            as: 'latestBillDetails',
+          },
+        },
+        {
+          $unwind: '$latestBillDetails',
+        },
+        {
+          $addFields: {
+            totalDebt: '$latestBillDetails.finalResult', // Use the finalResult of the latest bill as debt
+          },
+        },
+        {
+          $lookup: {
+            from: 'bills',
+            let: {
+              customerId: '$customerId',
+              billDate: '$latestBillDetails.billDate',
+            },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: ['$customerId', '$$customerId'] },
+                      { $lte: ['$billDate', '$$billDate'] },
+                    ],
+                  },
+                },
+              },
+              { $unwind: '$adjustmentList' },
+              {
+                $match: {
+                  'adjustmentList.name': 'Gởi',
+                  'adjustmentList.type': 'subtract',
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  totalPaid: { $sum: '$adjustmentList.amount' },
+                },
+              },
+            ],
+            as: 'totalPaidDetails',
+          },
+        },
+        {
+          $addFields: {
+            totalPaid: {
+              $ifNull: [
+                { $arrayElemAt: ['$totalPaidDetails.totalPaid', 0] },
+                0,
+              ],
+            },
+            totalResult: {
+              $subtract: [
+                '$totalSpent',
+                {
+                  $ifNull: [
+                    { $arrayElemAt: ['$totalPaidDetails.totalPaid', 0] },
+                    0,
+                  ],
+                },
+              ],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            month: '$_id.month',
+            year: '$_id.year',
+            billCount: 1,
+            totalSpent: 1,
+            totalDebt: 1,
+            totalPaid: 1,
+            totalResult: 1,
+          },
+        },
+        {
+          $sort: { year: 1, month: 1 },
+        },
+      ])
+      .exec();
+
+    return monthlyOverview;
   }
 
   async getCustomerOverviewProduct(
