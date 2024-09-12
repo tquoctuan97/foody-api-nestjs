@@ -15,14 +15,20 @@ export class InsightController {
 
   @Get('/customer-overview/:customerId')
   getCustomerOverview(@Param('customerId') customerId: string) {
+    if (!customerId) {
+      throw new BadRequestException('Customer id is required');
+    }
     return this.insightService.getCustomerOverview(customerId);
   }
   @Get('/customer-product-overview/:customerId')
   getCustomerProductOverview(
     @Param('customerId') customerId: string,
-    @Query('from') from: string,
-    @Query('to') to: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
+    if (!customerId) {
+      throw new BadRequestException('Customer id is required');
+    }
     return this.insightService.getCustomerOverviewProduct(customerId, from, to);
   }
 
@@ -41,6 +47,9 @@ export class InsightController {
     @Query('top') top?: number,
     @Query('sortBy') sortBy?: 'quantity' | 'revenue',
   ) {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
     const fromDate = new Date(from);
     const toDate = new Date(to);
     return this.insightService.getTopItemsByMonth(
@@ -58,15 +67,48 @@ export class InsightController {
     @Query('top') top?: number,
     @Query('sortBy') sortBy?: 'quantity' | 'revenue',
   ) {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
     const fromDate = new Date(from);
     const toDate = new Date(to);
     return this.insightService.getTopItems(fromDate, toDate, sortBy, top);
   }
 
-  // @Get('/revenue-barchart')
-  // getRevenueForBarChart(@Query('from') from: string, @Query('to') to: string) {
-  //   const fromDate = new Date(from);
-  //   const toDate = new Date(to);
-  //   return this.insightService.getRevenueForBarChart(fromDate, toDate);
-  // }
+  @Get('/top-customer')
+  getTopCustomer(
+    @Query('from') from: string,
+    @Query('to') to: string,
+    @Query('top') top?: number,
+    @Query('sortBy') sortBy?: 'debt' | 'spent' | 'paid',
+  ) {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    return this.insightService.getTopCustomer(fromDate, toDate, sortBy, top);
+  }
+
+  @Get('/finance-overview')
+  getFinanceOverView(@Query('from') from: string, @Query('to') to: string) {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    return this.insightService.financeOverview(fromDate, toDate);
+  }
+  @Get('/finance-overview-by-month')
+  getFinanceOverViewByMonth(
+    @Query('from') from: string,
+    @Query('to') to: string,
+  ) {
+    if (!from || !to) {
+      throw new BadRequestException('from and to are required');
+    }
+    const fromDate = new Date(from);
+    const toDate = new Date(to);
+    return this.insightService.financeOverviewByMonth(fromDate, toDate);
+  }
 }

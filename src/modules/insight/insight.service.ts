@@ -69,7 +69,6 @@ export class InsightService {
     top?: number,
   ): Promise<any[]> {
     const sortField = sortBy === 'quantity' ? 'totalQuantity' : 'totalRevenue';
-
     return this.billModel
       .aggregate([
         {
@@ -82,6 +81,7 @@ export class InsightService {
         {
           $group: {
             _id: '$billList.name', // Nhóm theo tên món hàng
+            totalBills: { $sum: 1 },
             totalQuantity: { $sum: '$billList.quantity' }, // Tổng số lượng món hàng
             totalRevenue: {
               $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
@@ -99,6 +99,7 @@ export class InsightService {
             name: '$_id', // Rename _id to name
             totalQuantity: '$totalQuantity',
             totalRevenue: '$totalRevenue',
+            totalBills: '$totalBills',
           },
         },
         {
@@ -153,15 +154,11 @@ export class InsightService {
       ])
       .exec();
 
-    console.log({ customerPaid });
-
     // Lấy bill gần nhất để kiểm tra nợ (debt)
     const latestBill = await this.billModel
       .findOne({ customerId: new Types.ObjectId(customerId), deletedAt: null })
       .sort({ billDate: -1, createdAt: -1 })
       .exec();
-
-    console.log({ latestBill });
 
     // Lấy nợ từ "Toa cũ" trong adjustmentList nếu có
     const debtAdjustment = latestBill?.adjustmentList?.find(
@@ -196,8 +193,6 @@ export class InsightService {
       deletedAt: null,
       ...(!!from && !!to && { billDate: { $gte: fromDate, $lte: toDate } }),
     };
-
-    console.log({ matchStage, from, to });
 
     // Lấy tổng số lượng sản phẩm mà khách hàng đã mua
     const totalQuantity = await this.billModel
@@ -329,6 +324,279 @@ export class InsightService {
           },
         },
         { $sort: { _id: 1 } }, // Sắp xếp theo ngày tăng dần
+      ])
+      .exec();
+  }
+
+  // FINACE
+  async getTopCustomer(
+    from: Date,
+    to: Date,
+    sortBy: 'debt' | 'spent' | 'paid' = 'spent',
+    top?: number,
+  ): Promise<any[]> {
+    const sortField =
+      sortBy === 'debt'
+        ? 'totalDebt'
+        : sortBy === 'paid'
+        ? 'totalPaid'
+        : 'totalSpent';
+
+    return this.billModel
+      .aggregate([
+        {
+          $match: {
+            billDate: { $gte: from, $lte: to },
+            deletedAt: null,
+          },
+        },
+        {
+          $sort: { billDate: -1, createdAt: -1 }, // Sắp xếp để lấy bill mới nhất
+        },
+        { $unwind: '$billList' },
+        {
+          $group: {
+            _id: '$customerId', // Nhóm theo customerId
+            billCount: { $sum: 1 },
+            latestBill: { $first: '$$ROOT' }, // Lấy bill mới nhất của mỗi customer
+            totalSpent: {
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+            }, // Tổng chi tiêu
+          },
+        },
+        {
+          $lookup: {
+            from: 'customers', // Join với bảng customer để lấy thông tin khách hàng
+            localField: '_id',
+            foreignField: '_id',
+            as: 'customer',
+          },
+        },
+        { $unwind: '$customer' },
+        {
+          $lookup: {
+            from: 'bills',
+            let: { customerId: '$_id' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: { $eq: ['$customerId', '$$customerId'] },
+                  deletedAt: null,
+                },
+              },
+              { $unwind: '$adjustmentList' },
+              {
+                $match: {
+                  'adjustmentList.name': 'Gởi',
+                  'adjustmentList.type': 'subtract',
+                  'adjustmentList.amount': { $gt: 0 },
+                },
+              },
+              {
+                $group: {
+                  _id: '$customerId',
+                  totalPaid: { $sum: '$adjustmentList.amount' }, // Tổng trả từ adjustmentList
+                  paidList: {
+                    $push: {
+                      _id: '$_id', // Bill ID
+                      billDate: '$billDate', // Ngày của hóa đơn
+                      amount: '$adjustmentList.amount', // Số tiền của điều chỉnh 'Gởi'
+                    },
+                  },
+                },
+              },
+            ],
+            as: 'paidInfo',
+          },
+        },
+        {
+          $addFields: {
+            totalPaid: {
+              $ifNull: [{ $arrayElemAt: ['$paidInfo.totalPaid', 0] }, 0],
+            },
+            paidList: {
+              $ifNull: [{ $arrayElemAt: ['$paidInfo.paidList', 0] }, []],
+            },
+            totalDebt: '$latestBill.finalResult', // Lấy finalResult của bill mới nhất làm totalDebt
+          },
+        },
+        {
+          $addFields: {
+            totalResult: { $subtract: ['$totalSpent', '$totalPaid'] }, // Tính toán totalResult = totalSpent - totalPaid
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            customerId: '$_id',
+            customerName: '$customer.name',
+            totalSpent: 1,
+            totalPaid: 1,
+            totalResult: 1,
+            totalDebt: 1, // Lấy từ latestBill.finalResult
+            paidList: 1, // Thêm danh sách trả về theo cấu trúc yêu cầu
+            billCount: 1,
+          },
+        },
+        {
+          $sort: { [sortField]: -1 }, // Sắp xếp theo debt hoặc spent giảm dần
+        },
+        {
+          $limit: Number(top) || Number.MAX_SAFE_INTEGER, // Áp dụng giới hạn top nếu có
+        },
+      ])
+      .exec();
+  }
+
+  async financeOverview(from: Date, to: Date): Promise<any> {
+    const matchStage: any = {
+      deletedAt: null,
+      billDate: { $gte: from, $lte: to },
+    };
+
+    // Total Paid (sum of adjustmentList items with name "Gởi" and type "subtract")
+    const totalPaid = await this.billModel
+      .aggregate([
+        { $match: matchStage },
+        { $unwind: '$adjustmentList' },
+        {
+          $match: {
+            'adjustmentList.name': 'Gởi',
+            'adjustmentList.type': 'subtract',
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalPaid: { $sum: '$adjustmentList.amount' },
+          },
+        },
+      ])
+      .exec();
+
+    // Total Spent (sum of quantity * price for all bill items)
+    const totalSpent = await this.billModel
+      .aggregate([
+        { $match: matchStage },
+        { $unwind: '$billList' },
+        {
+          $group: {
+            _id: null,
+            totalSpent: {
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+            },
+          },
+        },
+      ])
+      .exec();
+
+    // Total Debt (sum of finalResult of the latest bill for each customer)
+    const totalDebt = await this.billModel
+      .aggregate([
+        { $match: matchStage },
+        {
+          $group: {
+            _id: '$customerId',
+            latestBillDate: { $max: '$billDate' },
+            finalResult: { $last: '$finalResult' },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            totalDebt: { $sum: '$finalResult' },
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      totalPaid: totalPaid[0]?.totalPaid || 0,
+      totalSpent: totalSpent[0]?.totalSpent || 0,
+      totalDebt: totalDebt[0]?.totalDebt || 0,
+    };
+  }
+  async financeOverviewByMonth(from: Date, to: Date): Promise<any[]> {
+    return this.billModel
+      .aggregate([
+        {
+          $match: {
+            billDate: { $gte: from, $lte: to },
+            deletedAt: null,
+          },
+        },
+        { $unwind: '$billList' },
+        {
+          $group: {
+            _id: {
+              month: { $month: '$billDate' },
+              year: { $year: '$billDate' },
+              customerId: '$customerId',
+            },
+            totalSpent: {
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+            },
+            finalResult: { $last: '$finalResult' },
+          },
+        },
+        {
+          $group: {
+            _id: { month: '$_id.month', year: '$_id.year' },
+            totalSpent: { $sum: '$totalSpent' },
+            totalDebt: { $sum: '$finalResult' },
+          },
+        },
+        {
+          $lookup: {
+            from: 'bills',
+            let: { month: '$_id.month', year: '$_id.year' },
+            pipeline: [
+              {
+                $match: {
+                  $expr: {
+                    $and: [
+                      { $eq: [{ $month: '$billDate' }, '$$month'] },
+                      { $eq: [{ $year: '$billDate' }, '$$year'] },
+                      { $eq: ['$deletedAt', null] },
+                    ],
+                  },
+                },
+              },
+              { $unwind: '$adjustmentList' },
+              {
+                $match: {
+                  'adjustmentList.name': 'Gởi',
+                  'adjustmentList.type': 'subtract',
+                },
+              },
+              {
+                $group: {
+                  _id: null,
+                  totalPaid: { $sum: '$adjustmentList.amount' },
+                },
+              },
+            ],
+            as: 'paidInfo',
+          },
+        },
+        {
+          $addFields: {
+            totalPaid: {
+              $ifNull: [{ $arrayElemAt: ['$paidInfo.totalPaid', 0] }, 0],
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            month: '$_id.month',
+            year: '$_id.year',
+            totalSpent: 1,
+            totalPaid: 1,
+            totalDebt: 1,
+          },
+        },
+        { $sort: { year: 1, month: 1 } }, // Sort by year and month ascending
       ])
       .exec();
   }
