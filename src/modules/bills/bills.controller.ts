@@ -33,6 +33,23 @@ export class BillsController {
     return this.billsService.getAll(query);
   }
 
+  @Get('/summary-date')
+  getSummaryBillByDate(
+    @Query() query: BillParams,
+    @Query('groupBy') groupBy: 'date' | 'customer',
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.billsService.getBillsByRange(
+      query.billDateFrom,
+      query.billDateTo,
+      groupBy,
+      query.search,
+      query.customerId,
+      isDeleted,
+    );
+  }
+
   @Get(':id')
   getOne(@Param('id', IsObjectIdPipe) id: string) {
     return this.billsService.getOne(id);

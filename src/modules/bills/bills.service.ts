@@ -285,4 +285,74 @@ export class BillsService {
 
     return latestBill[0] || null;
   }
+
+  async getBillsByRange(
+    from: string,
+    to: string,
+    groupBy: 'date' | 'customer' = 'date',
+    customerName?: string,
+    customerId?: string,
+    isDeleted?: boolean,
+  ): Promise<any[]> {
+    console.log(from, to, customerName, customerId, isDeleted);
+    const matchStage: any = {
+      billDate: { $gte: new Date(from), $lte: new Date(to) },
+      ...(isDeleted ? { deletedAt: { $ne: null } } : { deletedAt: null }),
+      ...(!!customerId && { customerId: new Types.ObjectId(customerId) }),
+      ...(!!customerName && {
+        customerName: new RegExp(customerName || '', 'i'),
+      }),
+    };
+    if (groupBy === 'customer') {
+      return this.billModel
+        .aggregate([
+          { $match: matchStage },
+          { $unwind: '$billList' },
+          {
+            $group: {
+              _id: '$customerId',
+              customerName: { $first: '$customerName' },
+              totalSpent: {
+                $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+              },
+              latestBill: { $last: '$finalResult' },
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              customerName: '$customerName',
+              customerId: '$_id',
+              totalSpent: 1,
+              latestBill: 1,
+            },
+          },
+          { $sort: { latestBill: -1 } },
+        ])
+        .exec();
+    }
+
+    return this.billModel
+      .aggregate([
+        { $match: matchStage },
+        { $unwind: '$billList' },
+        {
+          $group: {
+            _id: '$billDate',
+            totalSpent: {
+              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
+            },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            name: '$_id',
+            totalSpent: 1,
+          },
+        },
+        { $sort: { name: -1 } },
+      ])
+      .exec();
+  }
 }
