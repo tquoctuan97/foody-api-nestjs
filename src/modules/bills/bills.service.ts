@@ -179,7 +179,7 @@ export class BillsService {
       billDate,
       billList,
       customerName,
-      customerId: new Types.ObjectId(customerId),
+      customerId: customerId ? new Types.ObjectId(customerId) : null,
       debt,
       finalResult,
       prePay,
@@ -224,7 +224,13 @@ export class BillsService {
     }
 
     await bill
-      .set({ ...updateBillDto, updatedBy: new Types.ObjectId(user.id) })
+      .set({
+        ...updateBillDto,
+        ...(updateBillDto.customerId && {
+          customerId: new Types.ObjectId(updateBillDto.customerId),
+        }),
+        updatedBy: new Types.ObjectId(user.id),
+      })
       .save();
 
     return bill.populate([
