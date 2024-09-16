@@ -71,6 +71,7 @@ export class InsightController {
     @Query('from') from: string,
     @Query('to') to: string,
     @Query('top') top?: number,
+    @Query('groupBy') groupBy?: 'day' | 'week' | 'month' | 'quarter' | 'year',
     @Query('sortBy') sortBy?: 'quantity' | 'revenue',
   ) {
     if (!from || !to) {
@@ -82,6 +83,7 @@ export class InsightController {
       fromDate,
       toDate,
       sortBy,
+      groupBy,
       top,
     );
   }
@@ -136,5 +138,9 @@ export class InsightController {
     const fromDate = new Date(from);
     const toDate = new Date(to);
     return this.insightService.financeOverviewByMonth(fromDate, toDate);
+  }
+  @Get('/test')
+  getTestFn() {
+    return this.insightService.getTest();
   }
 }

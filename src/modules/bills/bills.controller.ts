@@ -33,7 +33,7 @@ export class BillsController {
     return this.billsService.getAll(query);
   }
 
-  @Get('/summary-date')
+  @Get('/summary-bill')
   getSummaryBillByDate(
     @Query() query: BillParams,
     @Query('groupBy') groupBy: 'date' | 'customer',

@@ -14,9 +14,52 @@ export class InsightService {
     fromDate: Date,
     toDate: Date,
     sortBy: 'quantity' | 'revenue' = 'quantity',
+    groupBy: 'day' | 'week' | 'month' | 'quarter' | 'year' = 'month',
     top?: number,
   ) {
     const sortField = sortBy === 'quantity' ? 'totalQuantity' : 'totalRevenue';
+
+    const groupFields: any = {
+      day: { $dayOfMonth: '$billDate' },
+      month: { $month: '$billDate' },
+      year: { $year: '$billDate' },
+    };
+    const groupAt: any = {
+      day: '$_id.day',
+      month: '$_id.month',
+      year: '$_id.year',
+    };
+
+    switch (groupBy) {
+      case 'week':
+        groupFields.week = { $isoWeek: '$billDate' };
+        groupAt.week = '$_id.week';
+        delete groupAt.day;
+        delete groupFields.day;
+        break;
+      case 'month':
+        delete groupAt.day;
+        delete groupFields.day;
+        break;
+      case 'quarter':
+        groupFields.quarter = {
+          $ceil: { $divide: [{ $month: '$billDate' }, 3] },
+        };
+        delete groupFields.day;
+        delete groupAt.day;
+        delete groupFields.month;
+        delete groupAt.month;
+        groupAt.quarter = '$_id.quarter';
+        break;
+      case 'year':
+        delete groupFields.day;
+        delete groupFields.month;
+        delete groupAt.day;
+        delete groupAt.month;
+        break;
+      default:
+        break;
+    }
 
     const pipeline: any[] = [
       {
@@ -27,8 +70,7 @@ export class InsightService {
         $group: {
           _id: {
             itemName: '$billList.name',
-            month: { $month: '$billDate' },
-            year: { $year: '$billDate' },
+            ...groupFields,
           },
           totalQuantity: { $sum: '$billList.quantity' },
           totalRevenue: { $sum: '$billList.total' },
@@ -39,7 +81,7 @@ export class InsightService {
       },
       {
         $group: {
-          _id: { month: '$_id.month', year: '$_id.year' },
+          _id: { ...groupAt },
           items: {
             $push: {
               itemName: '$_id.itemName',
@@ -52,13 +94,23 @@ export class InsightService {
       {
         $project: {
           _id: 0,
-          month: '$_id.month',
+          ...(groupBy === 'week' && { week: '$_id.week' }),
+          ...(groupBy === 'quarter' && { quarter: '$_id.quarter' }),
+          ...(groupBy !== 'year' && { month: '$_id.month' }),
+          ...(groupBy === 'day' && { day: '$_id.day' }),
           year: '$_id.year',
           items: top ? { $slice: ['$items', Number(top)] } : '$items',
         },
       },
       {
-        $sort: { year: 1, month: 1 },
+        $sort:
+          groupBy === 'week'
+            ? { year: -1, week: -1 }
+            : groupBy === 'quarter'
+            ? { year: -1, quarter: -1 }
+            : groupBy === 'month'
+            ? { year: -1, month: -1 }
+            : { year: -1, month: -1, day: -1 },
       },
     ];
 
@@ -203,6 +255,7 @@ export class InsightService {
         {
           $group: {
             _id: {
+              day: { $dayOfMonth: '$billDate' },
               month: { $month: '$billDate' },
               year: { $year: '$billDate' },
             },
@@ -288,6 +341,7 @@ export class InsightService {
         {
           $project: {
             _id: 0,
+            day: '$_id.day',
             month: '$_id.month',
             year: '$_id.year',
             billCount: 1,
@@ -298,7 +352,7 @@ export class InsightService {
           },
         },
         {
-          $sort: { year: 1, month: 1 },
+          $sort: { year: 1, month: 1, day: 1 },
         },
       ])
       .exec();
@@ -720,11 +774,73 @@ export class InsightService {
             year: '$_id.year',
             totalSpent: 1,
             totalPaid: 1,
-            totalDebt: 1,
+            totalDebt: { $subtract: ['$totalSpent', '$totalPaid'] },
+            actualDebt: '$totalDebt',
+            actualPaid: { $subtract: ['$totalSpent', '$totalDebt'] },
           },
         },
         { $sort: { year: 1, month: 1 } }, // Sort by year and month ascending
       ])
       .exec();
+  }
+
+  async getTest() {
+    // Lấy tất cả các khách hàng
+    const customers = await this.customerModel.find().exec();
+
+    const allCustomerResults = [];
+
+    // Duyệt qua từng khách hàng
+    for (const customer of customers) {
+      const customerId = customer._id;
+
+      // Lấy tất cả các hóa đơn của khách hàng, sắp xếp theo billDate từ cũ đến mới
+      const bills = await this.billModel
+        .find({ customerId: new Types.ObjectId(customerId), deletedAt: null })
+        .sort({ billDate: 1 }) // Sắp xếp theo ngày tăng dần
+        .exec();
+
+      const customerResult = [];
+
+      // Duyệt qua từng hóa đơn để tính toán sự chênh lệch
+      for (let i = 1; i < bills.length; i++) {
+        const currentBill = bills[i];
+        const previousBill = bills[i - 1];
+
+        // Tìm giá trị Toa cũ trong adjustmentList của hóa đơn hiện tại
+        const currentToaCu =
+          currentBill.adjustmentList.find(
+            (adj) => adj.name === 'Toa cũ' && adj.type === 'add',
+          )?.amount || 0;
+
+        // Lấy finalResult của hóa đơn trước đó
+        const lastFinalResult = previousBill.finalResult || 0;
+
+        // Tính toán chênh lệch
+        const amountDifference = lastFinalResult - currentToaCu;
+
+        // Thêm vào kết quả nếu có chênh lệch
+        if (amountDifference !== 0) {
+          customerResult.push({
+            currentDate: currentBill.billDate,
+            currentToaCu: currentToaCu,
+            lastDate: previousBill.billDate,
+            lastFinalResult: lastFinalResult,
+            paid: amountDifference,
+          });
+        }
+      }
+
+      // Nếu có kết quả cho khách hàng này, thêm vào danh sách tất cả các kết quả
+      if (customerResult.length > 0) {
+        allCustomerResults.push({
+          customerId: customerId,
+          customerName: customer.name, // Giả sử bạn có tên khách hàng
+          results: customerResult,
+        });
+      }
+    }
+
+    return allCustomerResults;
   }
 }

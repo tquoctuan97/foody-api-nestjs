@@ -294,7 +294,6 @@ export class BillsService {
     customerId?: string,
     isDeleted?: boolean,
   ): Promise<any[]> {
-    console.log(from, to, customerName, customerId, isDeleted);
     const matchStage: any = {
       billDate: { $gte: new Date(from), $lte: new Date(to) },
       ...(isDeleted ? { deletedAt: { $ne: null } } : { deletedAt: null }),
@@ -315,7 +314,7 @@ export class BillsService {
               totalSpent: {
                 $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
               },
-              latestBill: { $last: '$finalResult' },
+              billCount: { $sum: 1 },
             },
           },
           {
@@ -324,10 +323,9 @@ export class BillsService {
               customerName: '$customerName',
               customerId: '$_id',
               totalSpent: 1,
-              latestBill: 1,
+              billCount: 1,
             },
           },
-          { $sort: { latestBill: -1 } },
         ])
         .exec();
     }
