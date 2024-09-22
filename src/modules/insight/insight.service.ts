@@ -1123,9 +1123,16 @@ export class InsightService {
   async getCustomerRanking(
     from: Date,
     to: Date,
-    sortBy: string = '+totalSpent',
+    sortBy = '+totalSpent',
     top?: number,
   ): Promise<any[]> {
+    const sortOrder = sortBy.startsWith('+') ? 1 : -1;
+    const sortField = sortBy.substring(1);
+
+    const sortByBuilder: PipelineStage.Sort['$sort'] = {
+      [sortField]: sortOrder,
+    };
+
     return this.billModel
       .aggregate([
         {
@@ -1141,11 +1148,19 @@ export class InsightService {
         {
           $group: {
             _id: '$customerId', // Group by customerId
-            billCount: { $sum: 1 },
+            uniqueIds: { $addToSet: '$_id' }, // Collect unique bill IDs
             latestBill: { $first: '$$ROOT' }, // Get the latest bill for each customer
             totalSpent: {
               $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
             }, // Calculate total spent
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            billCount: { $size: '$uniqueIds' }, // Count unique bills
+            latestBill: 1,
+            totalSpent: 1,
           },
         },
         {
@@ -1370,8 +1385,10 @@ export class InsightService {
         {
           $limit: Number(top) || Number.MAX_SAFE_INTEGER, // Apply limit based on 'top' parameter
         },
+        {
+          $sort: sortByBuilder,
+        },
       ])
-      .sort(sortBy)
       .exec();
   }
 
