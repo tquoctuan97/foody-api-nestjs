@@ -103,44 +103,58 @@ export class InsightController {
     return this.insightService.getTopItems(fromDate, toDate, sortBy, top);
   }
 
-  @Get('/top-customer')
-  getTopCustomer(
+  @Get('/customer-ranking')
+  getCustomerRanking(
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('sortBy') sortBy: string,
     @Query('top') top?: number,
-    @Query('sortBy') sortBy?: 'debt' | 'spent' | 'paid',
   ) {
     if (!from || !to) {
       throw new BadRequestException('from and to are required');
     }
     const fromDate = new Date(from);
     const toDate = new Date(to);
-    return this.insightService.getTopCustomer(fromDate, toDate, sortBy, top);
+    return this.insightService.getCustomerRanking(
+      fromDate,
+      toDate,
+      sortBy,
+      top,
+    );
   }
 
   @Get('/finance-overview')
-  getFinanceOverView(@Query('from') from: string, @Query('to') to: string) {
-    if (!from || !to) {
-      throw new BadRequestException('from and to are required');
-    }
+  getFinanceOverView(
+    @Query('customerId') customerId?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
     const fromDate = new Date(from);
     const toDate = new Date(to);
-    return this.insightService.financeOverview(fromDate, toDate);
+    return this.insightService.getOverviewFinance(fromDate, toDate, customerId);
   }
-  @Get('/finance-overview-by-month')
+  @Get('/finance-chart-data')
   getFinanceOverViewByMonth(
     @Query('from') from: string,
     @Query('to') to: string,
+    @Query('groupBy')
+    groupBy: 'day' | 'week' | 'month' | 'quarter' | 'year' = 'month',
+    @Query('customerId') customerId?: string,
   ) {
-    if (!from || !to) {
-      throw new BadRequestException('from and to are required');
-    }
     const fromDate = new Date(from);
     const toDate = new Date(to);
-    return this.insightService.financeOverviewByMonth(fromDate, toDate);
+    return this.insightService.getFinanceChartData(
+      fromDate,
+      toDate,
+      groupBy,
+      customerId,
+    );
   }
   @Get('/test')
   getTestFn() {
-    return this.insightService.getTest();
+    return this.insightService.getFinanceChartData(
+      new Date('2024-01-01T00:00:00.000Z'),
+      new Date('2024-12-31T23:59:59.999'),
+    );
   }
 }
