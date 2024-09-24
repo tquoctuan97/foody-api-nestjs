@@ -213,7 +213,7 @@ export class InsightService {
       .exec();
 
     // Chi tiêu trung bình trên mỗi hóa đơn
-    const averageSpending = await this.billModel
+    const _averageSpending = await this.billModel
       .aggregate([
         { $match: matchStage },
         {
@@ -320,7 +320,7 @@ export class InsightService {
 
     return {
       totalQuantity: totalQuantity[0]?.totalQuantity || 0,
-      averageSpending: averageSpending[0]?.averageSpending || 0,
+      averageSpending: _averageSpending[0]?.averageSpending || 0,
       averageInterval: dateIntervals[0]?.averageInterval || 0,
       productRanking,
       purchaseFrequency: purchaseFrequency[0]?.purchaseCount || 0,
