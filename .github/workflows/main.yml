@@ -22,7 +22,8 @@ jobs:
             nvm use v21.1.0
             export PATH="/root/.nvm/versions/node/v21.1.0/bin:$PATH"
             cd /home/ubuntu/foody-api-nestjs
-            git pull -f
+            git fetch origin
+            git reset --hard origin/main
             yarn install
             yarn build
             pm2 restart foody-api
