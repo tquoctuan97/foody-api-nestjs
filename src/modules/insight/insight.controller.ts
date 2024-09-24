@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Controller,
   Get,
+  InternalServerErrorException,
   Param,
   Query,
 } from '@nestjs/common';
@@ -14,7 +15,7 @@ export class InsightController {
   constructor(private readonly insightService: InsightService) {}
 
   @Get('/customer-product-overview/:customerId')
-  getCustomerProductOverview(
+  async getCustomerProductOverview(
     @Param('customerId') customerId: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
@@ -22,7 +23,23 @@ export class InsightController {
     if (!customerId) {
       throw new BadRequestException('Customer id is required');
     }
-    return this.insightService.getCustomerOverviewProduct(customerId, from, to);
+    try {
+      // Call the service to get the customer product overview
+      return await this.insightService.getCustomerOverviewProduct(
+        customerId,
+        from,
+        to,
+      );
+    } catch (error) {
+      // Log the error to the console
+      console.error('Error in getCustomerProductOverview:', error);
+
+      // Re-throw the error with additional information for the client
+      throw new InternalServerErrorException({
+        message: 'An error occurred while fetching customer product overview',
+        error: error.message || error,
+      });
+    }
   }
 
   @Get('/bills-with-item')

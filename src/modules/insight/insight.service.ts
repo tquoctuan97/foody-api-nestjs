@@ -188,143 +188,144 @@ export class InsightService {
     from?: string,
     to?: string,
   ) {
-    const fromDate = new Date(from);
-    const toDate = new Date(to);
+    try {
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
 
-    // Lọc theo khoảng thời gian nếu có
-    const matchStage: any = {
-      customerId: new Types.ObjectId(customerId),
-      deletedAt: null,
-      ...(!!from && !!to && { billDate: { $gte: fromDate, $lte: toDate } }),
-    };
+      console.log('Parsed fromDate:', fromDate, 'Parsed toDate:', toDate);
 
-    // Lấy tổng số lượng sản phẩm mà khách hàng đã mua
-    const totalQuantity = await this.billModel
-      .aggregate([
-        { $match: matchStage },
-        { $unwind: '$billList' },
-        {
-          $group: {
-            _id: null,
-            totalQuantity: { $sum: '$billList.quantity' },
-          },
-        },
-      ])
-      .exec();
+      const matchStage: any = {
+        customerId: new Types.ObjectId(customerId),
+        deletedAt: null,
+        ...(!!from && !!to && { billDate: { $gte: fromDate, $lte: toDate } }),
+      };
 
-    // Chi tiêu trung bình trên mỗi hóa đơn
-    const _averageSpending = await this.billModel
-      .aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: null,
-            averageSpending: {
-              $avg: '$sum',
+      console.log('Match Stage:', matchStage);
+
+      // Total quantity
+      const totalQuantity = await this.billModel
+        .aggregate([
+          { $match: matchStage },
+          { $unwind: '$billList' },
+          {
+            $group: {
+              _id: null,
+              totalQuantity: { $sum: '$billList.quantity' },
             },
           },
-        },
-      ])
-      .exec();
+        ])
+        .exec();
 
-    // Khoảng cách trung bình giữa mỗi đơn hàng
-    const dateIntervals = await this.billModel
-      .aggregate([
-        { $match: matchStage },
-        { $sort: { billDate: 1 } },
-        {
-          $group: {
-            _id: null,
-            dates: { $push: '$billDate' },
+      console.log('Total Quantity Result:', totalQuantity);
+
+      // Average spending
+      const _averageSpending = await this.billModel
+        .aggregate([
+          { $match: matchStage },
+          { $group: { _id: null, averageSpending: { $avg: '$sum' } } },
+        ])
+        .exec();
+
+      // Handle missing average spending
+      console.log('Average Spending Result:', _averageSpending);
+
+      // Date intervals
+      const dateIntervals = await this.billModel
+        .aggregate([
+          { $match: matchStage },
+          { $sort: { billDate: 1 } },
+          { $group: { _id: null, dates: { $push: '$billDate' } } },
+          {
+            $project: {
+              intervals: {
+                $map: {
+                  input: { $range: [1, { $size: '$dates' }] },
+                  as: 'i',
+                  in: {
+                    $subtract: [
+                      { $arrayElemAt: ['$dates', '$$i'] },
+                      { $arrayElemAt: ['$dates', { $subtract: ['$$i', 1] }] },
+                    ],
+                  },
+                },
+              },
+            },
           },
-        },
-        {
-          $project: {
-            intervals: {
-              $map: {
-                input: { $range: [1, { $size: '$dates' }] },
-                as: 'i',
-                in: {
-                  $subtract: [
-                    { $arrayElemAt: ['$dates', '$$i'] },
-                    { $arrayElemAt: ['$dates', { $subtract: ['$$i', 1] }] },
+          { $project: { averageInterval: { $avg: '$intervals' } } },
+        ])
+        .exec();
+
+      console.log('Date Intervals Result:', dateIntervals);
+
+      // Product ranking
+      const productRanking = await this.billModel
+        .aggregate([
+          { $match: matchStage },
+          { $unwind: '$billList' },
+          {
+            $group: {
+              _id: '$billList.name',
+              totalQuantity: { $sum: '$billList.quantity' },
+            },
+          },
+          { $sort: { totalQuantity: -1 } },
+        ])
+        .exec();
+
+      console.log('Product Ranking Result:', productRanking);
+
+      // Purchase frequency
+      const purchaseFrequency = await this.billModel
+        .aggregate([
+          { $match: matchStage },
+          {
+            $group: {
+              _id: {
+                month: { $month: '$billDate' },
+                year: { $year: '$billDate' },
+              },
+              purchaseCount: { $sum: 1 },
+            },
+          },
+          {
+            $group: {
+              _id: null,
+              totalPurchaseCount: { $sum: '$purchaseCount' },
+              uniqueMonths: {
+                $addToSet: {
+                  $concat: [
+                    { $toString: '$_id.year' },
+                    '-',
+                    { $toString: '$_id.month' },
                   ],
                 },
               },
             },
           },
-        },
-        {
-          $project: {
-            averageInterval: {
-              $avg: '$intervals',
-            },
-          },
-        },
-      ])
-      .exec();
-
-    // Xếp hạng sản phẩm mua nhiều nhất
-    const productRanking = await this.billModel
-      .aggregate([
-        { $match: matchStage },
-        { $unwind: '$billList' },
-        {
-          $group: {
-            _id: '$billList.name',
-            totalQuantity: { $sum: '$billList.quantity' },
-          },
-        },
-        { $sort: { totalQuantity: -1 } },
-      ])
-      .exec();
-
-    // Tần suất mua hàng của khách hàng
-    const purchaseFrequency = await this.billModel
-      .aggregate([
-        { $match: matchStage },
-        {
-          $group: {
-            _id: {
-              month: { $month: '$billDate' }, // Lấy tháng từ billDate
-              year: { $year: '$billDate' }, // Lấy năm từ billDate
-            },
-            purchaseCount: { $sum: 1 }, // Đếm số hóa đơn trong mỗi tháng
-          },
-        },
-        {
-          $group: {
-            _id: null,
-            totalPurchaseCount: { $sum: '$purchaseCount' }, // Tổng số hóa đơn
-            uniqueMonths: {
-              $addToSet: {
-                $concat: [
-                  { $toString: '$_id.year' },
-                  '-',
-                  { $toString: '$_id.month' },
-                ],
+          {
+            $project: {
+              _id: 0,
+              averagePurchaseFrequency: {
+                $divide: ['$totalPurchaseCount', { $size: '$uniqueMonths' }],
               },
-            }, // Tạo danh sách tháng duy nhất
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            averagePurchaseFrequency: {
-              $divide: ['$totalPurchaseCount', { $size: '$uniqueMonths' }], // Tính tần suất trung bình
             },
           },
-        },
-      ])
-      .exec();
+        ])
+        .exec();
 
-    return {
-      totalQuantity: totalQuantity[0]?.totalQuantity || 0,
-      averageSpending: _averageSpending[0]?.averageSpending || 0,
-      averageInterval: dateIntervals[0]?.averageInterval || 0,
-      productRanking,
-      purchaseFrequency: purchaseFrequency[0]?.purchaseCount || 0,
-    };
+      console.log('Purchase Frequency Result:', purchaseFrequency);
+
+      return {
+        totalQuantity: totalQuantity[0]?.totalQuantity || 0,
+        averageSpending: _averageSpending[0]?.averageSpending || 0,
+        averageInterval: dateIntervals[0]?.averageInterval || 0,
+        productRanking,
+        purchaseFrequency: purchaseFrequency[0]?.averagePurchaseFrequency || 0,
+      };
+    } catch (error) {
+      console.error('Error in getCustomerOverviewProduct:', error);
+      throw new Error(error);
+    }
   }
 
   async getBillsWithItem(itemName: string) {
