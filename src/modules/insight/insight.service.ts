@@ -570,162 +570,6 @@ export class InsightService {
   }
 
   // FINACE
-
-  // async financeOverview(from: Date, to: Date): Promise<any> {
-  //   const matchStage: any = {
-  //     deletedAt: null,
-  //     billDate: { $gte: from, $lte: to },
-  //   };
-
-  //   // Total Paid (sum of adjustmentList items with name "Gởi" and type "subtract")
-  //   const totalPaid = await this.billModel
-  //     .aggregate([
-  //       { $match: matchStage },
-  //       { $unwind: '$adjustmentList' },
-  //       {
-  //         $match: {
-  //           'adjustmentList.name': 'Gởi',
-  //           'adjustmentList.type': 'subtract',
-  //         },
-  //       },
-  //       {
-  //         $group: {
-  //           _id: null,
-  //           totalPaid: { $sum: '$adjustmentList.amount' },
-  //         },
-  //       },
-  //     ])
-  //     .exec();
-
-  //   // Total Spent (sum of quantity * price for all bill items)
-  //   const totalSpent = await this.billModel
-  //     .aggregate([
-  //       { $match: matchStage },
-  //       { $unwind: '$billList' },
-  //       {
-  //         $group: {
-  //           _id: null,
-  //           totalSpent: {
-  //             $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-  //           },
-  //         },
-  //       },
-  //     ])
-  //     .exec();
-
-  //   // Total Debt (sum of finalResult of the latest bill for each customer)
-  //   const totalDebt = await this.billModel
-  //     .aggregate([
-  //       { $match: matchStage },
-  //       {
-  //         $group: {
-  //           _id: '$customerId',
-  //           latestBillDate: { $max: '$billDate' },
-  //           finalResult: { $last: '$finalResult' },
-  //         },
-  //       },
-  //       {
-  //         $group: {
-  //           _id: null,
-  //           totalDebt: { $sum: '$finalResult' },
-  //         },
-  //       },
-  //     ])
-  //     .exec();
-
-  //   return {
-  //     totalPaid: totalPaid[0]?.totalPaid || 0,
-  //     totalSpent: totalSpent[0]?.totalSpent || 0,
-  //     totalDebt: totalDebt[0]?.totalDebt || 0,
-  //   };
-  // }
-  // async financeOverviewByMonth(from: Date, to: Date): Promise<any[]> {
-  //   return this.billModel
-  //     .aggregate([
-  //       {
-  //         $match: {
-  //           billDate: { $gte: from, $lte: to },
-  //           deletedAt: null,
-  //         },
-  //       },
-  //       { $unwind: '$billList' },
-  //       {
-  //         $group: {
-  //           _id: {
-  //             month: { $month: '$billDate' },
-  //             year: { $year: '$billDate' },
-  //             customerId: '$customerId',
-  //           },
-  //           totalSpent: {
-  //             $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-  //           },
-  //           finalResult: { $last: '$finalResult' },
-  //         },
-  //       },
-  //       {
-  //         $group: {
-  //           _id: { month: '$_id.month', year: '$_id.year' },
-  //           totalSpent: { $sum: '$totalSpent' },
-  //           totalDebt: { $sum: '$finalResult' },
-  //         },
-  //       },
-  //       {
-  //         $lookup: {
-  //           from: 'bills',
-  //           let: { month: '$_id.month', year: '$_id.year' },
-  //           pipeline: [
-  //             {
-  //               $match: {
-  //                 $expr: {
-  //                   $and: [
-  //                     { $eq: [{ $month: '$billDate' }, '$$month'] },
-  //                     { $eq: [{ $year: '$billDate' }, '$$year'] },
-  //                     { $eq: ['$deletedAt', null] },
-  //                   ],
-  //                 },
-  //               },
-  //             },
-  //             { $unwind: '$adjustmentList' },
-  //             {
-  //               $match: {
-  //                 'adjustmentList.name': 'Gởi',
-  //                 'adjustmentList.type': 'subtract',
-  //               },
-  //             },
-  //             {
-  //               $group: {
-  //                 _id: null,
-  //                 totalPaid: { $sum: '$adjustmentList.amount' },
-  //               },
-  //             },
-  //           ],
-  //           as: 'paidInfo',
-  //         },
-  //       },
-  //       {
-  //         $addFields: {
-  //           totalPaid: {
-  //             $ifNull: [{ $arrayElemAt: ['$paidInfo.totalPaid', 0] }, 0],
-  //           },
-  //         },
-  //       },
-  //       {
-  //         $project: {
-  //           _id: 0,
-  //           month: '$_id.month',
-  //           year: '$_id.year',
-  //           totalSpent: 1,
-  //           totalPaid: 1,
-  //           totalDebt: { $subtract: ['$totalSpent', '$totalPaid'] },
-  //           actualDebt: '$totalDebt',
-  //           actualPaid: { $subtract: ['$totalSpent', '$totalDebt'] },
-  //         },
-  //       },
-  //       { $sort: { year: 1, month: 1 } }, // Sort by year and month ascending
-  //     ])
-  //     .exec();
-  // }
-
   //PIPELINE
   async getFinanceChartData(
     fromDate: Date,
@@ -796,6 +640,10 @@ export class InsightService {
                 $match: {
                   $expr: { $eq: ['$customerId', '$$customerId'] },
                   deletedAt: null,
+                  ...(this.isValidDate(fromDate) &&
+                    this.isValidDate(toDate) && {
+                      billDate: { $gte: fromDate, $lte: toDate },
+                    }),
                 },
               },
               { $unwind: '$adjustmentList' },
@@ -911,6 +759,10 @@ export class InsightService {
             pipeline: [
               {
                 $match: {
+                  ...(this.isValidDate(fromDate) &&
+                    this.isValidDate(toDate) && {
+                      billDate: { $gte: fromDate, $lte: toDate },
+                    }),
                   $expr: { $eq: ['$customerId', '$$customerId'] },
                   deletedAt: null,
                 },
@@ -956,6 +808,10 @@ export class InsightService {
               {
                 $match: {
                   $expr: { $eq: ['$customerId', '$$customerId'] },
+                  ...(this.isValidDate(fromDate) &&
+                    this.isValidDate(toDate) && {
+                      billDate: { $gte: fromDate, $lte: toDate },
+                    }),
                   deletedAt: null,
                 },
               },
@@ -1111,7 +967,6 @@ export class InsightService {
             totalDebt: 1,
             actualLatestBillDebt: 1,
             billCount: 1,
-            hiddenPaymentList: 1,
             totalHiddenPayment: 1,
             actualPaid: 1,
           },
@@ -1180,6 +1035,7 @@ export class InsightService {
               {
                 $match: {
                   $expr: { $eq: ['$customerId', '$$customerId'] },
+                  billDate: { $gte: from, $lte: to },
                   deletedAt: null,
                 },
               },
@@ -1233,6 +1089,7 @@ export class InsightService {
               {
                 $match: {
                   $expr: { $eq: ['$customerId', '$$customerId'] },
+                  billDate: { $gte: from, $lte: to },
                   deletedAt: null,
                 },
               },
