@@ -79,47 +79,6 @@ export class InsightService {
   ) {
     const sortField = sortBy === 'quantity' ? 'totalQuantity' : 'totalRevenue';
     const { groupFields, groupAt } = this.getGroupByStage(groupBy);
-    // const groupFields: any = {
-    //   day: { $dayOfMonth: '$billDate' },
-    //   month: { $month: '$billDate' },
-    //   year: { $year: '$billDate' },
-    // };
-    // const groupAt: any = {
-    //   day: '$_id.day',
-    //   month: '$_id.month',
-    //   year: '$_id.year',
-    // };
-
-    // switch (groupBy) {
-    //   case 'week':
-    //     groupFields.week = { $isoWeek: '$billDate' };
-    //     groupAt.week = '$_id.week';
-    //     delete groupAt.day;
-    //     delete groupFields.day;
-    //     break;
-    //   case 'month':
-    //     delete groupAt.day;
-    //     delete groupFields.day;
-    //     break;
-    //   case 'quarter':
-    //     groupFields.quarter = {
-    //       $ceil: { $divide: [{ $month: '$billDate' }, 3] },
-    //     };
-    //     delete groupFields.day;
-    //     delete groupAt.day;
-    //     delete groupFields.month;
-    //     delete groupAt.month;
-    //     groupAt.quarter = '$_id.quarter';
-    //     break;
-    //   case 'year':
-    //     delete groupFields.day;
-    //     delete groupFields.month;
-    //     delete groupAt.day;
-    //     delete groupAt.month;
-    //     break;
-    //   default:
-    //     break;
-    // }
 
     const pipeline: any[] = [
       {
@@ -224,202 +183,6 @@ export class InsightService {
       .exec();
   }
 
-  async getCustomerOverview(
-    customerId: string,
-    from?: Date,
-    to?: Date,
-  ): Promise<any> {
-    const matchStage: any = {
-      customerId: new Types.ObjectId(customerId),
-      deletedAt: null,
-      ...(from && to && { billDate: { $gte: from, $lte: to } }), // Filter by date if from and to are provided
-    };
-
-    const customerBills = await this.billModel
-      .aggregate([
-        {
-          $match: matchStage, // Apply date range filter here
-        },
-        { $unwind: '$billList' }, // Handle each billList item
-        {
-          $group: {
-            _id: '$customerId',
-            billCount: { $sum: 1 },
-            totalSpent: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-            },
-          },
-        },
-      ])
-      .exec();
-
-    const customerPaid = await this.billModel
-      .aggregate([
-        {
-          $match: matchStage, // Apply the same date range filter here
-        },
-        { $unwind: '$adjustmentList' },
-        {
-          $match: {
-            'adjustmentList.name': 'Gởi',
-            'adjustmentList.type': 'subtract',
-          },
-        },
-        {
-          $group: {
-            _id: '$customerId',
-            totalPaid: { $sum: '$adjustmentList.amount' },
-          },
-        },
-      ])
-      .exec();
-
-    // Find the latest bill within the date range if applicable
-    const latestBill = await this.billModel
-      .findOne(matchStage)
-      .sort({ billDate: -1, createdAt: -1 })
-      .exec();
-
-    const totalDebt = latestBill?.finalResult || 0;
-    const totalPaid = customerPaid[0]?.totalPaid || 0;
-    const totalSpent = customerBills[0]?.totalSpent || 0;
-    const billCount = customerBills[0]?.billCount || 0;
-    const totalResult = totalSpent - totalPaid;
-
-    return {
-      billCount,
-      totalDebt,
-      totalSpent,
-      totalPaid,
-      totalResult,
-    };
-  }
-
-  async getCustomerOverviewByMonth(
-    customerId: string,
-    from?: Date,
-    to?: Date,
-  ): Promise<any> {
-    const matchStage: any = {
-      customerId: new Types.ObjectId(customerId),
-      deletedAt: null,
-      ...(from && to && { billDate: { $gte: from, $lte: to } }), // Filter by date if from and to are provided
-    };
-
-    const monthlyOverview = await this.billModel
-      .aggregate([
-        {
-          $match: matchStage, // Apply date range filter here
-        },
-        { $unwind: '$billList' },
-        {
-          $group: {
-            _id: {
-              day: { $dayOfMonth: '$billDate' },
-              month: { $month: '$billDate' },
-              year: { $year: '$billDate' },
-            },
-            billCount: { $sum: 1 },
-            totalSpent: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-            },
-            latestBill: { $last: '$$ROOT' }, // Get the latest bill for each month
-          },
-        },
-        {
-          $lookup: {
-            from: 'bills',
-            localField: 'latestBill._id',
-            foreignField: '_id',
-            as: 'latestBillDetails',
-          },
-        },
-        {
-          $unwind: '$latestBillDetails',
-        },
-        {
-          $addFields: {
-            totalDebt: '$latestBillDetails.finalResult', // Use the finalResult of the latest bill as debt
-          },
-        },
-        {
-          $lookup: {
-            from: 'bills',
-            let: {
-              customerId: '$customerId',
-              billDate: '$latestBillDetails.billDate',
-            },
-            pipeline: [
-              {
-                $match: {
-                  $expr: {
-                    $and: [
-                      { $eq: ['$customerId', '$$customerId'] },
-                      { $lte: ['$billDate', '$$billDate'] },
-                    ],
-                  },
-                },
-              },
-              { $unwind: '$adjustmentList' },
-              {
-                $match: {
-                  'adjustmentList.name': 'Gởi',
-                  'adjustmentList.type': 'subtract',
-                },
-              },
-              {
-                $group: {
-                  _id: null,
-                  totalPaid: { $sum: '$adjustmentList.amount' },
-                },
-              },
-            ],
-            as: 'totalPaidDetails',
-          },
-        },
-        {
-          $addFields: {
-            totalPaid: {
-              $ifNull: [
-                { $arrayElemAt: ['$totalPaidDetails.totalPaid', 0] },
-                0,
-              ],
-            },
-            totalResult: {
-              $subtract: [
-                '$totalSpent',
-                {
-                  $ifNull: [
-                    { $arrayElemAt: ['$totalPaidDetails.totalPaid', 0] },
-                    0,
-                  ],
-                },
-              ],
-            },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            day: '$_id.day',
-            month: '$_id.month',
-            year: '$_id.year',
-            billCount: 1,
-            totalSpent: 1,
-            totalDebt: 1,
-            totalPaid: 1,
-            totalResult: 1,
-          },
-        },
-        {
-          $sort: { year: 1, month: 1, day: 1 },
-        },
-      ])
-      .exec();
-
-    return monthlyOverview;
-  }
-
   async getCustomerOverviewProduct(
     customerId: string,
     from?: string,
@@ -456,7 +219,9 @@ export class InsightService {
         {
           $group: {
             _id: null,
-            averageSpending: { $avg: '$finalResult' },
+            averageSpending: {
+              $avg: '$sum',
+            },
           },
         },
       ])
@@ -520,8 +285,34 @@ export class InsightService {
         { $match: matchStage },
         {
           $group: {
+            _id: {
+              month: { $month: '$billDate' }, // Lấy tháng từ billDate
+              year: { $year: '$billDate' }, // Lấy năm từ billDate
+            },
+            purchaseCount: { $sum: 1 }, // Đếm số hóa đơn trong mỗi tháng
+          },
+        },
+        {
+          $group: {
             _id: null,
-            purchaseCount: { $count: {} },
+            totalPurchaseCount: { $sum: '$purchaseCount' }, // Tổng số hóa đơn
+            uniqueMonths: {
+              $addToSet: {
+                $concat: [
+                  { $toString: '$_id.year' },
+                  '-',
+                  { $toString: '$_id.month' },
+                ],
+              },
+            }, // Tạo danh sách tháng duy nhất
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            averagePurchaseFrequency: {
+              $divide: ['$totalPurchaseCount', { $size: '$uniqueMonths' }], // Tính tần suất trung bình
+            },
           },
         },
       ])
@@ -546,25 +337,6 @@ export class InsightService {
         {
           $match: { 'billList.name': itemName }, // Lọc lại theo tên món hàng
         },
-      ])
-      .exec();
-  }
-
-  // 3. Tổng hợp doanh thu theo khoảng thời gian để vẽ biểu đồ (bar chart)
-  async getRevenueForBarChart(from: Date, to: Date): Promise<any[]> {
-    return this.billModel
-      .aggregate([
-        { $match: { billDate: { $gte: from, $lte: to }, deletedAt: null } }, // Lọc theo khoảng thời gian
-        { $unwind: '$billList' }, // Phân rã billList để tính từng món
-        {
-          $group: {
-            _id: { $dateToString: { format: '%Y-%m-%d', date: '$billDate' } }, // Nhóm theo ngày
-            totalRevenue: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-            }, // Tổng doanh thu
-          },
-        },
-        { $sort: { _id: 1 } }, // Sắp xếp theo ngày tăng dần
       ])
       .exec();
   }
