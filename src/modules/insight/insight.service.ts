@@ -509,11 +509,19 @@ export class InsightService {
         {
           $group: {
             _id: '$customerId', // Group by customerId
-            billCount: { $sum: 1 },
+            uniqueIds: { $addToSet: '$_id' },
             latestBill: { $first: '$$ROOT' }, // Get the latest bill for each customer
             totalSpent: {
               $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
             }, // Calculate total spent
+          },
+        },
+        {
+          $project: {
+            _id: 1,
+            billCount: { $size: '$uniqueIds' }, // Count unique bills
+            latestBill: 1,
+            totalSpent: 1,
           },
         },
         {
