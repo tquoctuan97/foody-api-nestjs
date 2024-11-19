@@ -36,4 +36,17 @@ export class AuthController {
   getProfile(@Request() req) {
     return this.authService.getProfile(req.user.id);
   }
+
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @Post('refresh-token')
+  refreshAccessToken(@Body() body: { refresh_token: string }) {
+    return this.authService.refreshAccessToken(body.refresh_token);
+  }
+
+  @Post('logout')
+  @ApiBearerAuth()
+  logout(@Request() req) {
+    return this.authService.logout(req.user.id);
+  }
 }

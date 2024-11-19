@@ -32,6 +32,10 @@ export class User extends Document {
   @ApiProperty()
   @Prop({ required: false })
   avatar: string;
+
+  @ApiProperty()
+  @Prop({ required: false })
+  refreshToken?: string; // Store refresh token here (hashed if needed)
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
