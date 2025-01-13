@@ -32,7 +32,7 @@ export class UpdateRetailerDto {
   @IsOptional()
   address?: string;
 
-  @IsString()
+  @IsMongoId()
   @IsOptional()
   ownerId?: Types.ObjectId;
 
