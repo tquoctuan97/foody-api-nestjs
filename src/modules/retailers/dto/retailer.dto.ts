@@ -1,30 +1,37 @@
-import {
-  IsString,
-  IsBoolean,
-  IsOptional,
-  IsNotEmpty,
-  IsMongoId,
-  IsArray,
-} from 'class-validator';
 import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsBoolean,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateRetailerDto {
   @IsString()
   @IsNotEmpty()
+  @MinLength(1)
+  @MaxLength(128)
+  @IsNotEmpty()
   name: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsOptional()
+  @MaxLength(255)
   address: string;
 
   @IsMongoId()
-  @IsOptional()
+  @IsNotEmpty()
   ownerId: Types.ObjectId;
 }
 
 export class UpdateRetailerDto {
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   name?: string;
 
@@ -33,6 +40,7 @@ export class UpdateRetailerDto {
   address?: string;
 
   @IsString()
+  @IsNotEmpty()
   @IsOptional()
   ownerId?: Types.ObjectId;
 
