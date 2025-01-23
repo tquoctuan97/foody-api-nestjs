@@ -102,6 +102,8 @@ export class RetailerService {
     }
     if (filters.isDeleted !== undefined) {
       query.isDeleted = filters.isDeleted;
+    } else {
+      query.isDeleted = false;
     }
 
     const user = (req as any).user;
@@ -199,10 +201,10 @@ export class RetailerService {
         id,
         {
           ...updateRetailerDto,
-          ...(updateRetailerDto.ownerId && {
+          ...(updateRetailerDto?.ownerId && {
             ownerId: new mongoose.Types.ObjectId(updateRetailerDto.ownerId),
           }),
-          ...(updateRetailerDto.modIds.length && {
+          ...(updateRetailerDto?.modIds?.length && {
             modIds: updateRetailerDto.modIds.map(
               (mod) => new mongoose.Types.ObjectId(mod),
             ),
