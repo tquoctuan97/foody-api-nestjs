@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import mongoose, { Model } from 'mongoose';
+import mongoose, { FilterQuery, Model } from 'mongoose';
 import {
   AUDIT_LOG_ACTION_ENUM,
   AUDIT_LOG_MODULE_ENUM,
@@ -18,6 +18,8 @@ import {
 } from './dto/retailer.dto';
 import { Retailer, RetailerDocument } from './entities/retailer.entity';
 import { UsersService } from '../users/users.service';
+import { BillParams } from '../bills/models/bill.model';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class RetailerService {
@@ -75,7 +77,7 @@ export class RetailerService {
    * @param filters - Additional filters (e.g., ownerId, isDeleted).
    * @returns Paginated result with total count and retailers.
    */
-  async findAll(
+  async _findAll(
     page = 1,
     limit = 10,
     filters: RetailerFilterDto = {
@@ -150,6 +152,74 @@ export class RetailerService {
       limit,
       data,
     };
+  }
+
+  async findAll(query: RetailerFilterDto, req) {
+    const currentPage = parseInt(query?.page) || 1;
+    const pageSize = parseInt(query?.pageSize) || 10;
+
+    // const { billDate, billDateFrom, billDateTo } =
+    //   this.validateAndParseDates(query);
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+
+    const queryRetailer: FilterQuery<Retailer> = {
+      ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
+      ...(query?.address && {
+        address: { $regex: query.address, $options: 'i' },
+      }),
+      ...(query?.ownerId && { ownerId: query.ownerId }),
+      ...(query?.isDeleted
+        ? { deletedAt: { $ne: null } }
+        : { deletedAt: null }),
+      ...(userDetail.role !== 'admin' && {
+        $or: [
+          { _id: { $in: userDetail.ownedRetailer } },
+          { _id: { $in: userDetail.modRetailer } },
+        ],
+      }),
+    };
+
+    const totalCount = await this.retailerModel.countDocuments(queryRetailer);
+
+    const data = await this.retailerModel
+      .find(queryRetailer)
+      .sort(query?.sort || '-createdAt')
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .select('-isDeleted')
+      .populate({
+        path: 'ownerId',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'createdBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'lastUpdatedBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'deletedBy',
+        select: '_id name email avatar',
+      })
+      .lean<Retailer[]>()
+      .exec();
+
+    const response = new PaginationDto<Retailer[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      // count total number of pages
+      totalPages: Math.ceil(totalCount / pageSize),
+      // count total number of stores in database
+      totalCount: totalCount,
+      // check if there is next page
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
+
+    return response;
   }
 
   async findOne(id: string): Promise<Retailer> {
