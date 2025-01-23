@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
@@ -40,12 +41,13 @@ export class RetailerController {
 
   @Get()
   findAll(
-    @Query('page') page: number,
-    @Query('limit') limit: number,
-    @Query() filters: RetailerFilterDto,
-    @Req() req,
+    @Query() query: RetailerFilterDto,
+    @Req() req: Request,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
   ) {
-    return this.retailerService.findAll(page, limit, filters, req);
+    query.isDeleted = isDeleted;
+    return this.retailerService.findAll(query, req);
   }
 
   @Get(':id')

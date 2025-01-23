@@ -10,6 +10,7 @@ import {
   MinLength,
 } from 'class-validator';
 import { Types } from 'mongoose';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateRetailerDto {
   @IsString()
@@ -53,7 +54,7 @@ export class UpdateRetailerDto {
   isDeleted?: boolean;
 }
 
-export class RetailerFilterDto {
+export class RetailerFilterDto extends PaginationParams {
   @IsString()
   @IsOptional()
   name?: string;
@@ -69,14 +70,4 @@ export class RetailerFilterDto {
   @IsBoolean()
   @IsOptional()
   isDeleted?: boolean;
-}
-
-export class PaginationDto {
-  @Type(() => Number)
-  @IsOptional()
-  page?: number;
-
-  @Type(() => Number)
-  @IsOptional()
-  limit?: number;
 }
