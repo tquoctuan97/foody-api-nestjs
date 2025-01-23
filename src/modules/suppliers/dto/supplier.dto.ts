@@ -49,6 +49,10 @@ export class SupplierFilterDto extends PaginationParams {
   @IsOptional()
   name?: string;
 
+  @IsString()
+  @IsOptional()
+  contact?: string;
+
   @IsBoolean()
   @IsOptional()
   isDeleted?: boolean;

@@ -36,6 +36,7 @@ export class SupplierService {
     const supplier = new this.supplierModel({
       ...createSupplierDto,
       retailerId: new mongoose.Types.ObjectId(createSupplierDto.retailerId),
+      createdBy: new mongoose.Types.ObjectId(req.user.id),
     });
     const modifiedBy = (req as any).user?.id;
     try {
@@ -69,43 +70,6 @@ export class SupplierService {
    * @param filters - Additional filters (e.g., ownerId, isDeleted).
    * @returns Paginated result with total count and suppliers.
    */
-  async _findAll(
-    page = 1,
-    limit = 10,
-    filters: SupplierFilterDto = {},
-  ): Promise<{
-    total: number;
-    page: number;
-    limit: number;
-    data: Supplier[];
-  }> {
-    const query: any = { isDeleted: false };
-
-    // Add filters if provided
-    if (filters.name) {
-      query.name = { $regex: filters.name, $options: 'i' };
-    }
-    if (filters.retailerId) {
-      query.retailerId = filters.retailerId;
-    }
-
-    // Calculate total count and fetch suppliers
-    const total = await this.supplierModel.countDocuments(query);
-    const data = await this.supplierModel
-      .find(query)
-      .sort({ createdAt: -1 }) // Sort by createdAt (latest first)
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .populate({ path: 'retailerId', select: '_id name' })
-      .exec();
-
-    return {
-      total,
-      page,
-      limit,
-      data,
-    };
-  }
   async findAll(query: SupplierFilterDto, req) {
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
@@ -118,6 +82,9 @@ export class SupplierService {
 
     const queryRetailer: FilterQuery<Supplier> = {
       ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
+      ...(query?.contact && {
+        contact: { $regex: query.contact, $options: 'i' },
+      }),
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
@@ -169,7 +136,20 @@ export class SupplierService {
   async findOne(id: string): Promise<SupplierDocument> {
     const supplier = await this.supplierModel
       .findById(id)
+      .select('-isDeleted')
       .populate({ path: 'retailerId', select: '_id name' })
+      .populate({
+        path: 'createdBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'lastUpdatedBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'deletedBy',
+        select: '_id name email avatar',
+      })
       .exec();
     if (!supplier || supplier.isDeleted) {
       throw new NotFoundException(`Supplier with ID ${id} not found`);
@@ -186,6 +166,7 @@ export class SupplierService {
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
     }
+    const modifiedBy = (req as any).user?.id;
     const updatedSupplier = await this.supplierModel
       .findByIdAndUpdate(
         id,
@@ -196,6 +177,7 @@ export class SupplierService {
               updateSupplierDto.retailerId,
             ),
           }),
+          lastUpdatedBy: new mongoose.Types.ObjectId(modifiedBy),
         },
         { new: true },
       )
@@ -203,7 +185,6 @@ export class SupplierService {
     if (!updatedSupplier || updatedSupplier.isDeleted) {
       throw new NotFoundException(`Supplier with ID ${id} not found`);
     }
-    const modifiedBy = (req as any).user?.id;
 
     await this.auditLogsService.createLog({
       retailerId: new mongoose.Types.ObjectId(updatedSupplier.retailerId),
@@ -218,15 +199,22 @@ export class SupplierService {
   }
 
   async remove(id: string, req): Promise<SupplierDocument> {
+    // Get the user's ID from the JWT payload
+    const modifiedBy = (req as any).user?.id;
     const updatedSupplier = await this.supplierModel
-      .findByIdAndUpdate(id, { isDeleted: true }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: true,
+          deletedBy: new mongoose.Types.ObjectId(modifiedBy),
+          deletedAt: new Date(),
+        },
+        { new: true },
+      )
       .exec();
     if (!updatedSupplier) {
       throw new NotFoundException(`Supplier with ID ${id} not found`);
     }
-
-    // Get the user's ID from the JWT payload
-    const modifiedBy = (req as any).user?.id;
 
     await this.auditLogsService.createLog({
       retailerId: new mongoose.Types.ObjectId(updatedSupplier.retailerId),
