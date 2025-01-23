@@ -1,5 +1,5 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
+import { Document, Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
 import { ActiveSession, Role, UserStatus } from '../models/user.model';
 
@@ -40,12 +40,12 @@ export class User extends Document {
   //retailer
 
   @ApiProperty()
-  @Prop({ type: [String], default: [] })
-  ownedRetailer: string[];
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  ownedRetailer: Types.ObjectId[];
 
   @ApiProperty()
-  @Prop({ type: [String], default: [] })
-  modRetailer: string[];
+  @Prop({ type: [Types.ObjectId], ref: 'User', default: [] })
+  modRetailer: Types.ObjectId[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

@@ -114,7 +114,14 @@ export class UsersService {
     const retailerField =
       accessType === 'owner' ? 'ownedRetailer' : 'modRetailer';
 
-    return !!userDetail[retailerField]?.includes(retailerId);
+    // console.log('canAccessRetailer', {
+    //   userDetail,
+    //   retailerId,
+    //   key: userDetail[retailerField],
+    //   can: userDetail[retailerField]?.includes(retailerId),
+    // });
+
+    return userDetail[retailerField]?.includes(new Types.ObjectId(retailerId));
   }
 
   async addRetailerToUser(
@@ -128,7 +135,7 @@ export class UsersService {
     return this.userModel
       .findByIdAndUpdate(
         userId,
-        { $addToSet: { [retailerField]: retailerId } }, // Use $addToSet to avoid duplicates
+        { $addToSet: { [retailerField]: new Types.ObjectId(retailerId) } }, // Use $addToSet to avoid duplicates
         { new: true },
       )
       .exec();
@@ -145,7 +152,7 @@ export class UsersService {
     return this.userModel
       .findByIdAndUpdate(
         userId,
-        { $pull: { [retailerField]: retailerId } },
+        { $pull: { [retailerField]: new Types.ObjectId(retailerId) } },
         { new: true },
       )
       .exec();

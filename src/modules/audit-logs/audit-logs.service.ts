@@ -1,13 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { FilterQuery, Model } from 'mongoose';
 import { AuditLog } from './entities/audit-log.entity';
+import { AuditLogFilterDto } from './dto/audit-log.dto';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class AuditLogsService {
   constructor(
     @InjectModel(AuditLog.name)
     private readonly auditLogModel: Model<AuditLog>,
+    private readonly userService: UsersService,
   ) {}
 
   /**
@@ -17,7 +21,7 @@ export class AuditLogsService {
    * @param filters - Additional filters (e.g., retailerId, modifiedBy).
    * @returns Paginated result with total count and logs.
    */
-  async getAuditLogs(
+  async _getAuditLogs(
     page = 1,
     limit = 10,
     filters: {
@@ -66,12 +70,81 @@ export class AuditLogsService {
       logs,
     };
   }
+
+  async getAuditLogs(query: AuditLogFilterDto, req) {
+    const currentPage = parseInt(query?.page) || 1;
+    const pageSize = parseInt(query?.pageSize) || 10;
+
+    // const { billDate, billDateFrom, billDateTo } =
+    //   this.validateAndParseDates(query);
+
+    // console.log({ req: req.user });
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+
+    console.log({ userDetail });
+
+    const queryAuditLog: FilterQuery<AuditLog> = {
+      ...(query?.action && { action: { $regex: query.action, $options: 'i' } }),
+      ...(query?.module && { collectionName: query.module }),
+      ...(query?.modifiedBy && {
+        modifiedBy: query.modifiedBy,
+      }),
+      ...(user.role !== 'admin' && {
+        $or: [
+          { retailerId: { $in: userDetail.ownedRetailer } },
+          { retailerId: { $in: userDetail.modRetailer } },
+        ],
+      }),
+
+      // customerName: new RegExp(query?.search || '', 'i'),
+      // ...(query?.customerId && {
+      //   customerId: new Types.ObjectId(query.customerId),
+      // }),
+      // ...(billDate && { billDate }),
+      // ...(billDateFrom && { billDate: { $gte: billDateFrom } }),
+      // ...(billDateTo && { billDate: { $lte: billDateTo } }),
+      // ...(billDateFrom &&
+      //   billDateTo && { billDate: { $gte: billDateFrom, $lte: billDateTo } }),
+      // ...(query?.isDeleted
+      //   ? { deletedAt: { $ne: null } }
+      //   : { deletedAt: null }),
+    };
+
+    console.log({ queryAuditLog });
+
+    const totalCount = await this.auditLogModel.countDocuments(queryAuditLog);
+
+    const data = await this.auditLogModel
+      .find(queryAuditLog)
+      .sort(query?.sort || '-createdAt')
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .select('-newData -oldData')
+      .populate({ path: 'retailerId', select: '_id name' })
+      .populate({ path: 'modifiedBy', select: '_id name email avatar' })
+      .lean<AuditLog[]>()
+      .exec();
+
+    const response = new PaginationDto<AuditLog[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      // count total number of pages
+      totalPages: Math.ceil(totalCount / pageSize),
+      // count total number of stores in database
+      totalCount: totalCount,
+      // check if there is next page
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
+
+    return response;
+  }
+
   async createLog(data: Partial<AuditLog>) {
     return this.auditLogModel.create(data);
   }
 
   async findOne(id: string): Promise<AuditLog> {
-    console.log(id);
     const auditLog = await this.auditLogModel
       .findById(id)
       .populate({ path: 'retailerId', select: '_id name' })
