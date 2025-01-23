@@ -4,6 +4,7 @@ import { SupplierController } from './supplier.controller';
 import { MongooseModule } from '@nestjs/mongoose';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { Supplier, SupplierSchema } from './entities/supplier.entity';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
@@ -11,6 +12,7 @@ import { Supplier, SupplierSchema } from './entities/supplier.entity';
       { name: Supplier.name, schema: SupplierSchema },
     ]),
     AuditLogsModule,
+    UsersModule,
   ],
   controllers: [SupplierController],
   exports: [SupplierService],

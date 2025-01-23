@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
@@ -35,11 +36,13 @@ export class SupplierController {
 
   @Get()
   findAll(
-    @Query('page') page: number,
-    @Query('limit') limit: number,
-    @Query() filters: SupplierFilterDto,
+    @Query() query: SupplierFilterDto,
+    @Req() req: Request,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
   ) {
-    return this.supplierService.findAll(page, limit, filters);
+    query.isDeleted = isDeleted;
+    return this.supplierService.findAll(query, req);
   }
 
   @Get(':id')
