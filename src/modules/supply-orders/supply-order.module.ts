@@ -5,6 +5,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { AuditLogsModule } from '../audit-logs/audit-logs.module';
 import { SupplyOrder, SupplyOrderSchema } from './entities/supply-order.entity';
 import { UsersModule } from '../users/users.module';
+import { RetailersModule } from '../retailers/retailers.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { UsersModule } from '../users/users.module';
     ]),
     AuditLogsModule,
     UsersModule,
+    RetailersModule,
   ],
   controllers: [SupplyOrderController],
   exports: [SupplyOrderService],
