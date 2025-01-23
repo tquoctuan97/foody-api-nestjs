@@ -1,12 +1,12 @@
 import {
-  IsString,
-  IsOptional,
-  IsNotEmpty,
-  IsMongoId,
   IsBoolean,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 import { Types } from 'mongoose';
-import { Type } from 'class-transformer';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateSupplierDto {
   @IsMongoId()
@@ -40,7 +40,7 @@ export class UpdateSupplierDto {
   isDeleted?: boolean;
 }
 
-export class SupplierFilterDto {
+export class SupplierFilterDto extends PaginationParams {
   @IsMongoId()
   @IsOptional()
   retailerId?: Types.ObjectId;
@@ -48,14 +48,8 @@ export class SupplierFilterDto {
   @IsString()
   @IsOptional()
   name?: string;
-}
 
-export class PaginationDto {
-  @Type(() => Number)
+  @IsBoolean()
   @IsOptional()
-  page?: number;
-
-  @Type(() => Number)
-  @IsOptional()
-  limit?: number;
+  isDeleted?: boolean;
 }

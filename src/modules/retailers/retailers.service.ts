@@ -6,20 +6,19 @@ import {
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import mongoose, { FilterQuery, Model } from 'mongoose';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import {
   AUDIT_LOG_ACTION_ENUM,
   AUDIT_LOG_MODULE_ENUM,
 } from '../audit-logs/audit-logs.constant';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { UsersService } from '../users/users.service';
 import {
   CreateRetailerDto,
   RetailerFilterDto,
   UpdateRetailerDto,
 } from './dto/retailer.dto';
 import { Retailer, RetailerDocument } from './entities/retailer.entity';
-import { UsersService } from '../users/users.service';
-import { BillParams } from '../bills/models/bill.model';
-import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class RetailerService {
