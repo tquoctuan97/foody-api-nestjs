@@ -80,21 +80,24 @@ export class SupplierService {
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
 
+    console.log('supplier', userDetail);
+
     const queryRetailer: FilterQuery<Supplier> = {
       ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
       ...(query?.contact && {
         contact: { $regex: query.contact, $options: 'i' },
       }),
+      retailerId: query.retailerId,
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
-      ...(userDetail.role !== 'admin' && {
-        $or: [
-          { retailerId: { $in: userDetail.ownedRetailer } },
-          { retailerId: { $in: userDetail.modRetailer } },
-          { retailerId: query.retailerId },
-        ],
-      }),
+      // ...(userDetail.role !== 'admin' && {
+      //   $or: [
+      //     { retailerId: { $in: userDetail.ownedRetailer } },
+      //     { retailerId: { $in: userDetail.modRetailer } },
+      //     { retailerId: query.retailerId },
+      //   ],
+      // }),
     };
 
     const totalCount = await this.supplierModel.countDocuments(queryRetailer);

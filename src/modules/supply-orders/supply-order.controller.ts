@@ -4,10 +4,13 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
   Req,
+  SetMetadata,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
 
@@ -18,13 +21,22 @@ import {
   UpdateSupplyOrderDto,
 } from './dto/supply-order.dto';
 import { SupplyOrderDocument } from './entities/supply-order.entity';
+import {
+  RETAILER_ROLE_KEY,
+  RetailerRole,
+  RetailerRoleGuard,
+} from '../retailers/retailer-access.guard';
 
 @ApiBearerAuth()
+@UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/supply-orders')
 export class SupplyOrderController {
   constructor(private readonly supplyOrderService: SupplyOrderService) {}
 
   @Post()
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   create(
     @Body() createSupplyOrderDto: CreateSupplyOrderDto,
     @Req() req: Request,
@@ -33,20 +45,31 @@ export class SupplyOrderController {
   }
 
   @Get()
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   findAll(
-    @Query('page') page: number,
-    @Query('limit') limit: number,
-    @Query() filters: SupplyOrderFilterDto,
+    @Query() query: SupplyOrderFilterDto,
+    @Req() req: Request,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
   ) {
-    return this.supplyOrderService.findAll(page, limit, filters);
+    query.isDeleted = isDeleted;
+    return this.supplyOrderService.findAll(query, req);
   }
 
   @Get(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   findOne(@Param('id') id: string): Promise<SupplyOrderDocument> {
     return this.supplyOrderService.findOne(id);
   }
 
   @Patch(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   update(
     @Param('id') id: string,
     @Body() updateSupplyOrderDto: UpdateSupplyOrderDto,
@@ -56,6 +79,9 @@ export class SupplyOrderController {
   }
 
   @Delete(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   remove(
     @Param('id') id: string,
     @Req() req: Request,

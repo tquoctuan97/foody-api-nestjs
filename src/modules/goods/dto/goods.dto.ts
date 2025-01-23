@@ -59,7 +59,7 @@ export class UpdateGoodDto {
 
 export class GoodFilterDto extends PaginationParams {
   @IsMongoId()
-  @IsOptional()
+  @IsNotEmpty()
   retailerId?: Types.ObjectId;
 
   @IsString()

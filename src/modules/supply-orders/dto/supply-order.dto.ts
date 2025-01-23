@@ -12,6 +12,7 @@ import {
 import { Type } from 'class-transformer';
 import { Types } from 'mongoose';
 import { ApiProperty } from '@nestjs/swagger';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateSupplyOrderDto {
   @IsMongoId()
@@ -109,22 +110,24 @@ export class UpdateSupplyOrderDto {
   isPaidComplete?: boolean;
 }
 
-export class SupplyOrderFilterDto {
+export class SupplyOrderFilterDto extends PaginationParams {
   @IsMongoId()
-  @IsOptional()
+  @IsNotEmpty()
   retailerId?: Types.ObjectId;
 
   @IsMongoId()
   @IsOptional()
   supplierId?: Types.ObjectId;
-}
 
-export class PaginationDto {
-  @Type(() => Number)
+  @IsDate()
   @IsOptional()
-  page?: number;
+  orderDate?: Date;
 
-  @Type(() => Number)
+  @IsBoolean()
   @IsOptional()
-  limit?: number;
+  isPaidComplete?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  isDeleted?: boolean;
 }
