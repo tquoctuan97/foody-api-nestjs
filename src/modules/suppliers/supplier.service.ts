@@ -92,6 +92,7 @@ export class SupplierService {
         $or: [
           { retailerId: { $in: userDetail.ownedRetailer } },
           { retailerId: { $in: userDetail.modRetailer } },
+          { retailerId: query.retailerId },
         ],
       }),
     };

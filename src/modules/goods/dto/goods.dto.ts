@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 import { Types } from 'mongoose';
 import { Type } from 'class-transformer';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateGoodDto {
   @IsMongoId()
@@ -56,7 +57,7 @@ export class UpdateGoodDto {
   isDeleted?: boolean;
 }
 
-export class GoodFilterDto {
+export class GoodFilterDto extends PaginationParams {
   @IsMongoId()
   @IsOptional()
   retailerId?: Types.ObjectId;
@@ -68,14 +69,8 @@ export class GoodFilterDto {
   @IsString()
   @IsOptional()
   category?: string;
-}
 
-export class PaginationDto {
-  @Type(() => Number)
+  @IsBoolean()
   @IsOptional()
-  page?: number;
-
-  @Type(() => Number)
-  @IsOptional()
-  limit?: number;
+  isDeleted?: boolean;
 }

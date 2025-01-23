@@ -4,10 +4,13 @@ import {
   Delete,
   Get,
   Param,
+  ParseBoolPipe,
   Patch,
   Post,
   Query,
   Req,
+  SetMetadata,
+  UseGuards,
 } from '@nestjs/common';
 import { GoodService } from './goods.service';
 
@@ -15,6 +18,11 @@ import { ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateGoodDto, GoodFilterDto, UpdateGoodDto } from './dto/goods.dto';
 import { GoodDocument } from './entities/goods.entity';
+import {
+  RETAILER_ROLE_KEY,
+  RetailerRole,
+  RetailerRoleGuard,
+} from '../retailers/retailer-access.guard';
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -24,11 +32,15 @@ interface AuthenticatedRequest extends Request {
 }
 
 @ApiBearerAuth()
+@UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/goods')
 export class GoodController {
   constructor(private readonly goodService: GoodService) {}
 
   @Post()
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   async create(
     @Body() createGoodDto: CreateGoodDto,
     @Req() req: AuthenticatedRequest,
@@ -37,20 +49,31 @@ export class GoodController {
   }
 
   @Get()
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   findAll(
-    @Query('page') page: number,
-    @Query('limit') limit: number,
-    @Query() filters: GoodFilterDto,
+    @Query() query: GoodFilterDto,
+    @Req() req: Request,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
   ) {
-    return this.goodService.findAll(page, limit, filters);
+    query.isDeleted = isDeleted;
+    return this.goodService.findAll(query, req);
   }
 
   @Get(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   findOne(@Param('id') id: string): Promise<GoodDocument> {
     return this.goodService.findOne(id);
   }
 
   @Patch(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   async update(
     @Param('id') id: string,
     @Body() updateGoodDto: UpdateGoodDto,
@@ -60,6 +83,9 @@ export class GoodController {
   }
 
   @Delete(':id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   async remove(
     @Param('id') id: string,
     @Req() req: AuthenticatedRequest,
