@@ -16,6 +16,18 @@ export class Supplier extends Document {
 
   @Prop({ default: false })
   isDeleted: boolean;
+
+  @Prop({ default: null, type: Date })
+  deletedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  lastUpdatedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  deletedBy: Types.ObjectId;
 }
 
 export const SupplierSchema = SchemaFactory.createForClass(Supplier);
