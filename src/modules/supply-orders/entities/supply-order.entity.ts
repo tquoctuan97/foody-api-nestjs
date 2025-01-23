@@ -36,14 +36,23 @@ export class SupplyOrder extends Document {
   @Prop({ required: true, default: 0 })
   debt: number;
 
-  @Prop({ required: true, type: Types.ObjectId, ref: 'User' })
-  createdBy: Types.ObjectId;
-
   @Prop({ default: false })
   isPaidComplete: boolean;
 
   @Prop({ default: false })
   isDeleted: boolean;
+
+  @Prop({ default: null, type: Date })
+  deletedAt: Date;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  createdBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  lastUpdatedBy: Types.ObjectId;
+
+  @Prop({ type: Types.ObjectId, ref: 'User', default: null })
+  deletedBy: Types.ObjectId;
 }
 
 export const SupplyOrderSchema = SchemaFactory.createForClass(SupplyOrder);

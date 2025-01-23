@@ -3,7 +3,7 @@ import { Document, Types } from 'mongoose';
 
 export type AuditLogDocument = AuditLog & Document;
 
-@Schema({ timestamps: true, versionKey: false })
+@Schema({ timestamps: false, versionKey: false })
 export class AuditLog extends Document {
   @Prop({ required: true, type: Types.ObjectId, ref: 'Retailer' })
   retailerId: Types.ObjectId;

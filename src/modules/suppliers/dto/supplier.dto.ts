@@ -42,7 +42,7 @@ export class UpdateSupplierDto {
 
 export class SupplierFilterDto extends PaginationParams {
   @IsMongoId()
-  @IsOptional()
+  @IsNotEmpty()
   retailerId?: Types.ObjectId;
 
   @IsString()

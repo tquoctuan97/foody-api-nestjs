@@ -21,6 +21,9 @@ import {
   SupplyOrderFilterDto,
   UpdateSupplyOrderDto,
 } from './dto/supply-order.dto';
+import { UsersService } from '../users/users.service';
+import { FilterQuery } from 'mongoose';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class SupplyOrderService {
@@ -28,6 +31,7 @@ export class SupplyOrderService {
     @InjectModel(SupplyOrder.name)
     private supplyOrderModel: Model<SupplyOrderDocument>,
     private readonly auditLogsService: AuditLogsService,
+    private readonly userService: UsersService,
   ) {}
 
   async create(
@@ -57,58 +61,73 @@ export class SupplyOrderService {
     }
   }
 
-  /**
-   * Get paginated supplyOrders with optional filters.
-   * @param page - Current page number.
-   * @param limit - Number of items per page.
-   * @param filters - Additional filters (e.g., ownerId, isDeleted).
-   * @returns Paginated result with total count and supplyOrders.
-   */
-  async findAll(
-    page = 1,
-    limit = 10,
-    filters: SupplyOrderFilterDto = {},
-  ): Promise<{
-    total: number;
-    page: number;
-    limit: number;
-    data: SupplyOrder[];
-  }> {
-    const query: any = {};
+  async findAll(query: SupplyOrderFilterDto, req) {
+    const currentPage = parseInt(query?.page) || 1;
+    const pageSize = parseInt(query?.pageSize) || 10;
 
-    // Add filters if provided
-    if (filters.retailerId) {
-      query.retailerId = filters.retailerId;
-    }
-    if (filters.supplierId) {
-      query.supplierId = filters.supplierId;
-    }
+    // const { billDate, billDateFrom, billDateTo } =
+    //   this.validateAndParseDates(query);
 
-    const skip = (page - 1) * limit;
-    const [supplyOrders, total] = await Promise.all([
-      this.supplyOrderModel
-        .find(query)
-        .sort({ orderDate: -1 })
-        .skip(skip)
-        .limit(limit)
-        .select('-createdAt -updatedAt -__v -items -isDeleted')
-        .populate({ path: 'retailerId', select: '_id name' })
-        .populate({ path: 'supplierId', select: '_id name' })
-        .populate({ path: 'createdBy', select: '_id name' })
-        // .populate({
-        //   path: 'items.goodId',
-        //   select: '_id name unit description category',
-        // })
-        .exec(),
-      this.supplyOrderModel.countDocuments(query).exec(),
-    ]);
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
 
-    return {
-      total,
-      page,
-      limit,
-      data: supplyOrders,
+    console.log('supply-orders', userDetail);
+
+    const queryRetailer: FilterQuery<SupplyOrder> = {
+      ...(query?.supplierId && { supplierId: query.supplierId }),
+      ...(query?.retailerId && { retailerId: query.retailerId }),
+      ...(query?.orderDate && { orderDate: query.orderDate }),
+      isDeleted: query?.isDeleted,
+      isPaidComplete: query?.isPaidComplete,
+
+      // ...(userDetail.role !== 'admin' && {
+      //   $or: [
+      //     { retailerId: { $in: userDetail.ownedRetailer } },
+      //     { retailerId: { $in: userDetail.modRetailer } },
+      //     { retailerId: query.retailerId },
+      //   ],
+      // }),
     };
+
+    const totalCount = await this.supplyOrderModel.countDocuments(
+      queryRetailer,
+    );
+
+    const data = await this.supplyOrderModel
+      .find(queryRetailer)
+      .sort(query?.sort || '-createdAt')
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .select('-createdAt -updatedAt -__v -items -isDeleted')
+      .populate({ path: 'retailerId', select: '_id name' })
+      .populate({ path: 'supplierId', select: '_id name' })
+      .populate({
+        path: 'createdBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'lastUpdatedBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'deletedBy',
+        select: '_id name email avatar',
+      })
+      .lean<SupplyOrder[]>()
+      .exec();
+
+    const response = new PaginationDto<SupplyOrder[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      // count total number of pages
+      totalPages: Math.ceil(totalCount / pageSize),
+      // count total number of stores in database
+      totalCount: totalCount,
+      // check if there is next page
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
+
+    return response;
   }
 
   async findOne(id: string): Promise<SupplyOrderDocument> {
@@ -120,7 +139,18 @@ export class SupplyOrderService {
         path: 'items.goodId',
         select: '_id name unit description category',
       })
-      .populate({ path: 'createdBy', select: '_id name' })
+      .populate({
+        path: 'createdBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'lastUpdatedBy',
+        select: '_id name email avatar',
+      })
+      .populate({
+        path: 'deletedBy',
+        select: '_id name email avatar',
+      })
       .exec();
     if (!supplyOrder) {
       throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
@@ -134,17 +164,25 @@ export class SupplyOrderService {
     updateSupplyOrderDto: UpdateSupplyOrderDto,
     req,
   ): Promise<SupplyOrderDocument> {
+    const modifiedBy = (req as any).user?.id;
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
     }
     const updateSupplyOrder = await this.supplyOrderModel
-      .findByIdAndUpdate(id, updateSupplyOrderDto, { new: true })
+      .findByIdAndUpdate(
+        id,
+        {
+          ...updateSupplyOrderDto,
+          lastUpdatedBy: new Types.ObjectId(modifiedBy),
+        },
+        { new: true },
+      )
       .exec();
 
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(updateSupplyOrder.retailerId),
-      modifiedBy: new Types.ObjectId(req.user?.id),
+      modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
       action: AUDIT_LOG_ACTION_ENUM.UPDATE,
       oldData: existingSupplyOrder,
@@ -155,8 +193,17 @@ export class SupplyOrderService {
   }
 
   async remove(id: string, req): Promise<SupplyOrderDocument> {
+    const modifiedBy = (req as any).user?.id;
     const updatedSupplyOrder = await this.supplyOrderModel
-      .findByIdAndUpdate(id, { isDeleted: true }, { new: true })
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: true,
+          deletedBy: new Types.ObjectId(modifiedBy),
+          deletedAt: new Date(),
+        },
+        { new: true },
+      )
       .exec();
     if (!updatedSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
@@ -164,7 +211,7 @@ export class SupplyOrderService {
 
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(updatedSupplyOrder.retailerId),
-      modifiedBy: new Types.ObjectId(req.user?.id),
+      modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
       action: AUDIT_LOG_ACTION_ENUM.DELETE,
       oldData: updatedSupplyOrder,

@@ -82,7 +82,7 @@ export class AuditLogsService {
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
 
-    console.log({ userDetail });
+    console.log('getAuditLogs', { userDetail });
 
     const queryAuditLog: FilterQuery<AuditLog> = {
       ...(query?.action && { action: { $regex: query.action, $options: 'i' } }),
@@ -90,25 +90,13 @@ export class AuditLogsService {
       ...(query?.modifiedBy && {
         modifiedBy: query.modifiedBy,
       }),
-      ...(user.role !== 'admin' && {
-        $or: [
-          { retailerId: { $in: userDetail.ownedRetailer } },
-          { retailerId: { $in: userDetail.modRetailer } },
-        ],
-      }),
-
-      // customerName: new RegExp(query?.search || '', 'i'),
-      // ...(query?.customerId && {
-      //   customerId: new Types.ObjectId(query.customerId),
+      ...(query?.retailerId && { retailerId: query.retailerId }),
+      // ...(user.role == 'admin' && {
+      //   $or: [
+      //     { retailerId: { $in: userDetail.ownedRetailer } },
+      //     { retailerId: { $in: userDetail.modRetailer } },
+      //   ],
       // }),
-      // ...(billDate && { billDate }),
-      // ...(billDateFrom && { billDate: { $gte: billDateFrom } }),
-      // ...(billDateTo && { billDate: { $lte: billDateTo } }),
-      // ...(billDateFrom &&
-      //   billDateTo && { billDate: { $gte: billDateFrom, $lte: billDateTo } }),
-      // ...(query?.isDeleted
-      //   ? { deletedAt: { $ne: null } }
-      //   : { deletedAt: null }),
     };
 
     console.log({ queryAuditLog });
