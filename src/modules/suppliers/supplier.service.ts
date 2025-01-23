@@ -159,7 +159,6 @@ export class SupplierService {
     const updatedSupplier = await this.supplierModel
       .findByIdAndUpdate(id, { isDeleted: true }, { new: true })
       .exec();
-    console.log({ updatedSupplier });
     if (!updatedSupplier) {
       throw new NotFoundException(`Supplier with ID ${id} not found`);
     }

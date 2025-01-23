@@ -70,7 +70,8 @@ export class RetailerRoleGuard implements CanActivate {
         if (isOwner) {
           userRetailerRoles.push(RetailerRole.OWNER);
         }
-      } else if (requiredRole === RetailerRole.MOD) {
+      }
+      if (requiredRole === RetailerRole.MOD) {
         const isMod = await this.usersService.canAccessRetailer(
           user,
           retailerId,

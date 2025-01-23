@@ -7,6 +7,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { Types } from 'mongoose';
+import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateAuditLogDto {
   @IsMongoId()
@@ -19,7 +20,7 @@ export class CreateAuditLogDto {
 
   @IsString()
   @IsNotEmpty()
-  collection: string;
+  module: string;
 
   @IsString()
   @IsNotEmpty()
@@ -34,7 +35,7 @@ export class CreateAuditLogDto {
   newData?: object;
 }
 
-export class AuditLogFilterDto {
+export class AuditLogFilterDto extends PaginationParams {
   @IsMongoId()
   @IsOptional()
   retailerId?: Types.ObjectId;
@@ -49,15 +50,5 @@ export class AuditLogFilterDto {
 
   @IsString()
   @IsOptional()
-  collection?: string;
-}
-
-export class PaginationDto {
-  @Type(() => Number)
-  @IsOptional()
-  page?: number;
-
-  @Type(() => Number)
-  @IsOptional()
-  limit?: number;
+  module?: string;
 }
