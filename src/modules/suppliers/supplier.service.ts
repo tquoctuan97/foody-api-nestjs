@@ -87,7 +87,9 @@ export class SupplierService {
       ...(query?.contact && {
         contact: { $regex: query.contact, $options: 'i' },
       }),
-      retailerId: query.retailerId,
+      ...(query?.retailerId && {
+        retailerId: new mongoose.Types.ObjectId(query.retailerId),
+      }),
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),

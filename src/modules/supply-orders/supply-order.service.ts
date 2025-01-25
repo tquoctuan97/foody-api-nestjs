@@ -75,7 +75,9 @@ export class SupplyOrderService {
 
     const queryRetailer: FilterQuery<SupplyOrder> = {
       ...(query?.supplierId && { supplierId: query.supplierId }),
-      ...(query?.retailerId && { retailerId: query.retailerId }),
+      ...(query?.retailerId && {
+        retailerId: new Types.ObjectId(query.retailerId),
+      }),
       ...(query?.orderDate && { orderDate: query.orderDate }),
       isDeleted: query?.isDeleted,
       isPaidComplete: query?.isPaidComplete,

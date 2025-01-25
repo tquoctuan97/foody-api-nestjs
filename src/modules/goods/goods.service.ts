@@ -113,7 +113,9 @@ export class GoodService {
       ...(query?.category && {
         category: { $regex: query.category, $options: 'i' },
       }),
-      ...(query?.retailerId && { retailerId: query.retailerId }),
+      ...(query?.retailerId && {
+        retailerId: new Types.ObjectId(query.retailerId),
+      }),
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),

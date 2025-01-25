@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model } from 'mongoose';
+import { FilterQuery, Model, Types } from 'mongoose';
 import { AuditLog } from './entities/audit-log.entity';
 import { AuditLogFilterDto } from './dto/audit-log.dto';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
@@ -90,7 +90,9 @@ export class AuditLogsService {
       ...(query?.modifiedBy && {
         modifiedBy: query.modifiedBy,
       }),
-      ...(query?.retailerId && { retailerId: query.retailerId }),
+      ...(query?.retailerId && {
+        retailerId: new Types.ObjectId(query.retailerId),
+      }),
       // ...(user.role == 'admin' && {
       //   $or: [
       //     { retailerId: { $in: userDetail.ownedRetailer } },
