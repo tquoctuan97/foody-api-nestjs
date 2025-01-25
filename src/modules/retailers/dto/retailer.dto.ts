@@ -28,6 +28,10 @@ export class CreateRetailerDto {
   @IsMongoId()
   @IsNotEmpty()
   ownerId: Types.ObjectId;
+
+  @IsArray()
+  @IsOptional()
+  modIds?: Types.ObjectId[];
 }
 
 export class UpdateRetailerDto {

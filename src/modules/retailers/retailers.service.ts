@@ -36,6 +36,11 @@ export class RetailerService {
         ? new mongoose.Types.ObjectId(createRetailerDto.ownerId)
         : new mongoose.Types.ObjectId(req.user.id),
       createdBy: new mongoose.Types.ObjectId(req.user.id),
+      ...(createRetailerDto?.modIds?.length > 0 && {
+        modIds: createRetailerDto?.modIds?.map(
+          (i) => new mongoose.Types.ObjectId(i),
+        ),
+      }),
     });
     const modifiedBy = (req as any).user?.id;
     try {
