@@ -83,7 +83,10 @@ export class SupplierService {
     console.log('supplier', userDetail);
 
     const queryRetailer: FilterQuery<Supplier> = {
-      ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
+      ...(query?.search && {
+        name: { $regex: `^${query?.search?.trim()}$`, $options: 'i' },
+      }),
+      // ...(query?.search && { name: { $regex: query.search, $options: 'i' } }),
       ...(query?.contact && {
         contact: { $regex: query.contact, $options: 'i' },
       }),

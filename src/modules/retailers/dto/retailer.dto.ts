@@ -17,7 +17,6 @@ export class CreateRetailerDto {
   @IsNotEmpty()
   @MinLength(1)
   @MaxLength(128)
-  @IsNotEmpty()
   name: string;
 
   @IsString()
