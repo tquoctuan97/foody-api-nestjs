@@ -1,12 +1,11 @@
 import {
-  IsString,
-  IsOptional,
-  IsNotEmpty,
-  IsMongoId,
   IsBoolean,
+  IsMongoId,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
 } from 'class-validator';
 import { Types } from 'mongoose';
-import { Type } from 'class-transformer';
 import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateGoodDto {

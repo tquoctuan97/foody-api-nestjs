@@ -14,13 +14,13 @@ export class Good extends Document {
   @Prop({ required: true, unique: true })
   name: string;
 
-  @Prop()
+  @Prop({ default: null })
   description: string;
 
-  @Prop()
+  @Prop({ default: null })
   category: string;
 
-  @Prop()
+  @Prop({ default: null })
   unit: string;
 
   @Prop({ default: false })

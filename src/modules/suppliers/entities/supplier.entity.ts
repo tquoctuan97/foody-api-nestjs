@@ -11,7 +11,7 @@ export class Supplier extends Document {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ type: String })
+  @Prop({ type: String, default: null })
   contact: string;
 
   @Prop({ default: false })
