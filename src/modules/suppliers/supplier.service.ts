@@ -83,10 +83,9 @@ export class SupplierService {
     console.log('supplier', userDetail);
 
     const queryRetailer: FilterQuery<Supplier> = {
-      ...(query?.search && {
-        name: { $regex: `^${query?.search?.trim()}$`, $options: 'i' },
+      ...(query?.name && {
+        name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
-      // ...(query?.search && { name: { $regex: query.search, $options: 'i' } }),
       ...(query?.contact && {
         contact: { $regex: query.contact, $options: 'i' },
       }),
@@ -96,6 +95,12 @@ export class SupplierService {
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
+      ...(query?.search && {
+        $or: [
+          { name: { $regex: query.search, $options: 'i' } },
+          { contact: { $regex: query.search, $options: 'i' } },
+        ],
+      }),
       // ...(userDetail.role !== 'admin' && {
       //   $or: [
       //     { retailerId: { $in: userDetail.ownedRetailer } },

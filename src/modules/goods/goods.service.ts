@@ -109,7 +109,9 @@ export class GoodService {
     console.log('goods', userDetail);
 
     const queryRetailer: FilterQuery<Good> = {
-      ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
+      ...(query?.name && {
+        name: { $regex: `^${query?.search?.trim()}$`, $options: 'i' },
+      }),
       ...(query?.category && {
         category: { $regex: query.category, $options: 'i' },
       }),
@@ -119,6 +121,12 @@ export class GoodService {
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
+      ...(query?.search && {
+        $or: [
+          { name: { $regex: query.search, $options: 'i' } },
+          { category: { $regex: query.search, $options: 'i' } },
+        ],
+      }),
       // ...(userDetail.role !== 'admin' && {
       //   $or: [
       //     { retailerId: { $in: userDetail.ownedRetailer } },

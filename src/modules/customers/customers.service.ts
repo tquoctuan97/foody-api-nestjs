@@ -30,6 +30,13 @@ export class CustomersService {
       ...(query?.isDeleted
         ? { deletedAt: { $ne: null } }
         : { deletedAt: null }),
+      ...(query?.search && {
+        $or: [
+          { name: { $regex: query.search, $options: 'i' } },
+          { displayName: { $regex: query.search, $options: 'i' } },
+          { phoneNumber: { $regex: query.search, $options: 'i' } },
+        ],
+      }),
     };
 
     const totalCount = await this.customerModel.countDocuments(queryCustomer);

@@ -81,7 +81,6 @@ export class SupplyOrderService {
       ...(query?.orderDate && { orderDate: query.orderDate }),
       isDeleted: query?.isDeleted,
       isPaidComplete: query?.isPaidComplete,
-
       // ...(userDetail.role !== 'admin' && {
       //   $or: [
       //     { retailerId: { $in: userDetail.ownedRetailer } },

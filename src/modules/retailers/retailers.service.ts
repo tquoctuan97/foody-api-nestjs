@@ -92,7 +92,9 @@ export class RetailerService {
     const userDetail = await this.userService.findById(user.id);
 
     const queryRetailer: FilterQuery<Retailer> = {
-      ...(query?.name && { name: { $regex: query.name, $options: 'i' } }),
+      ...(query?.name && {
+        name: { $regex: `^${query?.search?.trim()}$`, $options: 'i' },
+      }),
       ...(query?.address && {
         address: { $regex: query.address, $options: 'i' },
       }),
@@ -104,6 +106,12 @@ export class RetailerService {
         $or: [
           { _id: { $in: userDetail.ownedRetailer } },
           { _id: { $in: userDetail.modRetailer } },
+        ],
+      }),
+      ...(query?.search && {
+        $or: [
+          { name: { $regex: query.search, $options: 'i' } },
+          { address: { $regex: query.search, $options: 'i' } },
         ],
       }),
     };
