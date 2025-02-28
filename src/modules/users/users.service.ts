@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Type } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
@@ -95,33 +95,23 @@ export class UsersService {
     return this.userModel.findByIdAndDelete(id);
   }
 
-  //Retailer role
-  async canAccessRetailer(
-    user: User,
-    retailerId: string,
-    accessType: 'owner' | 'moderator',
-  ): Promise<boolean> {
-    if (user.role === 'admin') {
-      return true; // Admins have access to all retailers
-    }
-
-    const userDetail = await this.userModel.findById(user.id).exec();
-
-    if (!userDetail) {
-      return false; // User not found
-    }
-
-    const retailerField =
-      accessType === 'owner' ? 'ownedRetailer' : 'modRetailer';
-
-    // console.log('canAccessRetailer', {
-    //   userDetail,
-    //   retailerId,
-    //   key: userDetail[retailerField],
-    //   can: userDetail[retailerField]?.includes(retailerId),
-    // });
-
-    return userDetail[retailerField]?.includes(new Types.ObjectId(retailerId));
+  async checkRole(
+    userId: Types.ObjectId | string,
+    retailerId: Types.ObjectId | string,
+  ) {
+    const userDetails = await this.userModel
+      .findById(new Types.ObjectId(userId))
+      .select(['-password', '-activeSessionList'])
+      .exec();
+    const canAccessAsAdmin = userDetails.role === 'admin';
+    const canAccessAsOwner = userDetails.ownedRetailer.includes(
+      new Types.ObjectId(retailerId),
+    );
+    const canAccessAsMod = userDetails.modRetailer.includes(
+      new Types.ObjectId(retailerId),
+    );
+    const combined = canAccessAsAdmin || canAccessAsOwner || canAccessAsMod;
+    return { canAccessAsAdmin, canAccessAsOwner, canAccessAsMod, combined };
   }
 
   async addRetailerToUser(

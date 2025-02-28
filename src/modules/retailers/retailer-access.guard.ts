@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UsersService } from '../users/users.service';
 import { RetailerService } from './retailers.service';
+import { Types } from 'mongoose';
 
 // Định nghĩa metadata key để sử dụng trong controller
 export const RETAILER_ROLE_KEY = 'retailerRoles';
@@ -26,77 +27,53 @@ export class RetailerRoleGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Lấy metadata retailer roles từ handler (controller method)
     const retailerRoleOptions = this.reflector.get<RetailerRoleOptions>(
       RETAILER_ROLE_KEY,
       context.getHandler(),
     );
 
-    // Nếu không có metadata roles, cho phép truy cập (ví dụ: endpoint public)
     if (!retailerRoleOptions) {
       return true;
     }
 
-    const { roles } = retailerRoleOptions; // Chỉ lấy roles
     const request = context.switchToHttp().getRequest();
-    const user = request.user; // Giả sử AuthGuard đã xác thực user và gán vào request.user
-    const retailerId = request.params.id; // Giả sử retailerId được truyền qua params
+    const user = request.user;
+    const retailerId = request.query.retailerId || request.params.retailerId;
 
     if (!user) {
-      return false; // Không có user, không cho phép truy cập
+      return false;
     }
 
-    // Admin có toàn quyền
     if (user.role === 'admin') {
-      return true; // Admin có toàn quyền
+      return true;
     }
 
     if (!retailerId) {
-      return false; // Không có retailerId, không cho phép truy cập
+      return false;
     }
 
-    const userRole = user.role;
-    const userRetailerRoles = [];
+    const userDetails = await this.usersService.findById(user.id);
+    const userIsOwner = userDetails.ownedRetailer.includes(
+      new Types.ObjectId(retailerId),
+    );
 
-    // Kiểm tra quyền dựa trên retailerRoleOptions và user role
-    for (const requiredRole of roles) {
-      if (requiredRole === RetailerRole.OWNER) {
-        const isOwner = await this.usersService.canAccessRetailer(
-          user,
-          retailerId,
-          'owner',
-        );
-        // console.log(requiredRole, isOwner);
-        if (isOwner) {
-          userRetailerRoles.push(RetailerRole.OWNER);
-        }
-      }
-      if (requiredRole === RetailerRole.MOD) {
-        const isMod = await this.usersService.canAccessRetailer(
-          user,
-          retailerId,
-          'moderator',
-        );
-        // console.log(requiredRole, isMod);
-        if (isMod) {
-          userRetailerRoles.push(RetailerRole.MOD);
-        }
-      }
-    }
-    // console.log({ userRetailerRoles });
-    // Logic phân quyền đơn giản hóa, không cần action
-    if (userRole === 'user') {
-      if (userRetailerRoles.includes(RetailerRole.OWNER)) {
-        return true; // User là owner có quyền update và xem detail
-      }
+    const userIsMod = userDetails.modRetailer.includes(
+      new Types.ObjectId(retailerId),
+    );
+
+    if (!userIsOwner && !userIsMod) {
+      return false;
     }
 
-    if (userRole === 'user' || userRole === 'admin') {
-      if (userRetailerRoles.includes(RetailerRole.MOD)) {
-        return true; // User hoặc Admin là mod có quyền xem detail
-      }
+    const canAccessAsOwner =
+      retailerRoleOptions.roles.includes(RetailerRole.OWNER) && !userIsOwner;
+    const canAccessAsMod =
+      retailerRoleOptions.roles.includes(RetailerRole.MOD) && !userIsMod;
+
+    if (!canAccessAsOwner && !canAccessAsMod) {
+      return false;
     }
 
-    return false; // Không có quyền truy cập
+    return true;
   }
 }
