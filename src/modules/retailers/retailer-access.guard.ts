@@ -38,13 +38,20 @@ export class RetailerRoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    const retailerId = request.query.retailerId || request.params.retailerId;
+    const retailerId =
+      request.query.retailerId ||
+      request.params.retailerId ||
+      request.query.id ||
+      request.params.id;
+
+    console.log({ retailerId });
 
     if (!user) {
       return false;
     }
 
     if (user.role === 'admin') {
+      console.log({ canAccessAsAdmin: true });
       return true;
     }
 
@@ -69,7 +76,7 @@ export class RetailerRoleGuard implements CanActivate {
       retailerRoleOptions.roles.includes(RetailerRole.OWNER) && !userIsOwner;
     const canAccessAsMod =
       retailerRoleOptions.roles.includes(RetailerRole.MOD) && !userIsMod;
-
+    console.log({ canAccessAsOwner, canAccessAsMod });
     if (!canAccessAsOwner && !canAccessAsMod) {
       return false;
     }

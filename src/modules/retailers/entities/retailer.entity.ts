@@ -8,7 +8,7 @@ export class Retailer extends Document {
   @Prop({ type: String, required: true, unique: true, index: true })
   name: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, default: null })
   address: string;
 
   @Prop({ required: true, type: Types.ObjectId, ref: 'User' })

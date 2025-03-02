@@ -20,7 +20,7 @@ export class CreateRetailerDto {
   name: string;
 
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   @MaxLength(255)
   address: string;
 
@@ -51,10 +51,6 @@ export class UpdateRetailerDto {
   @IsArray()
   @IsOptional()
   modIds?: Types.ObjectId[];
-
-  @IsBoolean()
-  @IsOptional()
-  isDeleted?: boolean;
 }
 
 export class RetailerFilterDto extends PaginationParams {
@@ -66,11 +62,11 @@ export class RetailerFilterDto extends PaginationParams {
   @IsOptional()
   address?: string;
 
-  @IsMongoId()
+  @IsString()
   @IsOptional()
-  ownerId?: Types.ObjectId;
+  ownerId?: string;
 
-  @IsBoolean()
+  @IsString()
   @IsOptional()
   isDeleted?: boolean;
 }

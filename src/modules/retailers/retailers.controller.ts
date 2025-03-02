@@ -18,12 +18,12 @@ import {
   RetailerFilterDto,
   UpdateRetailerDto,
 } from './dto/retailer.dto';
-import { RetailerService } from './retailers.service';
 import {
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
 } from './retailer-access.guard';
+import { RetailerService } from './retailers.service';
 
 @ApiBearerAuth()
 @UseGuards(RetailerRoleGuard)
@@ -54,8 +54,8 @@ export class RetailerController {
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  findOne(@Param('id') id: string) {
-    return this.retailerService.findOne(id);
+  findOne(@Param('id') id: string, @Req() req: Request) {
+    return this.retailerService.findOne(id, req);
   }
 
   @Patch(':id')
@@ -72,6 +72,26 @@ export class RetailerController {
       updateRetailerDto,
       req,
     );
+
+    return updatedRetailer;
+  }
+
+  @Delete('hard-delete/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async hardDelete(@Param('id') id: string, @Req() req: Request) {
+    const updatedRetailer = await this.retailerService.hardDelete(id, req);
+
+    return updatedRetailer;
+  }
+
+  @Patch('restore/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async unArchive(@Param('id') id: string, @Req() req: Request) {
+    const updatedRetailer = await this.retailerService.unarchive(id, req);
 
     return updatedRetailer;
   }

@@ -124,7 +124,7 @@ export class UsersService {
 
     return this.userModel
       .findByIdAndUpdate(
-        userId,
+        new Types.ObjectId(userId),
         { $addToSet: { [retailerField]: new Types.ObjectId(retailerId) } }, // Use $addToSet to avoid duplicates
         { new: true },
       )
@@ -145,6 +145,18 @@ export class UsersService {
         { $pull: { [retailerField]: new Types.ObjectId(retailerId) } },
         { new: true },
       )
+      .exec();
+  }
+
+  async detachAllRetailersFromUsers(retailerId: Types.ObjectId | string) {
+    //remove retailer from all users -ownedRetailer, modRetailer
+    return this.userModel
+      .updateMany({
+        $pull: {
+          ownedRetailer: new Types.ObjectId(retailerId),
+          modRetailer: new Types.ObjectId(retailerId),
+        },
+      })
       .exec();
   }
 }
