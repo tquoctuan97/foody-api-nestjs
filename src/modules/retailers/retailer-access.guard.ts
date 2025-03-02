@@ -44,8 +44,6 @@ export class RetailerRoleGuard implements CanActivate {
       request.query.id ||
       request.params.id;
 
-    console.log({ retailerId });
-
     if (!user) {
       return false;
     }
@@ -73,10 +71,17 @@ export class RetailerRoleGuard implements CanActivate {
     }
 
     const canAccessAsOwner =
-      retailerRoleOptions.roles.includes(RetailerRole.OWNER) && !userIsOwner;
+      retailerRoleOptions.roles.includes(RetailerRole.OWNER) && userIsOwner;
     const canAccessAsMod =
-      retailerRoleOptions.roles.includes(RetailerRole.MOD) && !userIsMod;
-    console.log({ canAccessAsOwner, canAccessAsMod });
+      retailerRoleOptions.roles.includes(RetailerRole.MOD) && userIsMod;
+    console.log('GUARD CHECK', {
+      retailerId,
+      roles: retailerRoleOptions.roles,
+      canAccessAsOwner,
+      canAccessAsMod,
+      userIsOwner,
+      userIsMod,
+    });
     if (!canAccessAsOwner && !canAccessAsMod) {
       return false;
     }
