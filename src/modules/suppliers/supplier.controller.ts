@@ -33,9 +33,9 @@ export class SupplierController {
   constructor(private readonly supplierService: SupplierService) {}
 
   @Post()
-  // @SetMetadata(RETAILER_ROLE_KEY, {
-  //   roles: [RetailerRole.OWNER, RetailerRole.MOD],
-  // })
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  })
   async create(
     @Body() createSupplierDto: CreateSupplierDto,
     @Req() req,
@@ -90,11 +90,31 @@ export class SupplierController {
 
   @Delete(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+    roles: [RetailerRole.OWNER],
   })
   async remove(@Param('id') id: string, @Req() req): Promise<SupplierDocument> {
     const deletedSupplier = await this.supplierService.remove(id, req);
 
     return deletedSupplier;
+  }
+
+  @Delete('hard-delete/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async hardDelete(@Param('id') id: string, @Req() req): Promise<SupplierDocument> {
+    const deletedSupplier = await this.supplierService.hardDelete(id, req);
+
+    return deletedSupplier;
+  }
+
+  @Patch('restore/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async restore(@Param('id') id: string, @Req() req): Promise<SupplierDocument> {
+    const restoredSupplier = await this.supplierService.restore(id, req);
+
+    return restoredSupplier;
   }
 }
