@@ -66,8 +66,11 @@ export class GoodController {
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  findOne(@Param('id') id: string): Promise<GoodDocument> {
-    return this.goodService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request
+  ): Promise<GoodDocument> {
+    return this.goodService.findOne(id, req);
   }
 
   @Patch(':id')
@@ -84,12 +87,34 @@ export class GoodController {
 
   @Delete(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+    roles: [RetailerRole.OWNER],
   })
   async remove(
     @Param('id') id: string,
     @Req() req: AuthenticatedRequest,
   ): Promise<GoodDocument> {
     return await this.goodService.remove(id, req);
+  }
+
+  @Delete('hard-delete/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async hardDelete(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<GoodDocument> {
+    return await this.goodService.hardDelete(id, req);
+  }
+
+  @Patch('restore/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async restore(
+    @Param('id') id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<GoodDocument> {
+    return await this.goodService.restore(id, req);
   }
 }

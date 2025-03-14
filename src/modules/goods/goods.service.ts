@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   NotFoundException,
@@ -97,20 +98,16 @@ export class GoodService {
   }
 
   async findAll(query: GoodFilterDto, req) {
-    const currentPage = parseInt(query?.page) || 1;
-    const pageSize = parseInt(query?.pageSize) || 10;
-
-    // const { billDate, billDateFrom, billDateTo } =
-    //   this.validateAndParseDates(query);
+    const currentPage = parseInt(query?.page?.toString()) || 1;
+    const pageSize = parseInt(query?.pageSize?.toString()) || 10;
 
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
-
-    console.log('goods', userDetail);
+    const userIsAdmin = userDetail.role === 'admin';
 
     const queryRetailer: FilterQuery<Good> = {
       ...(query?.name && {
-        name: { $regex: `^${query?.search?.trim()}$`, $options: 'i' },
+        name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
       ...(query?.category && {
         category: { $regex: query.category, $options: 'i' },
@@ -118,22 +115,23 @@ export class GoodService {
       ...(query?.retailerId && {
         retailerId: new Types.ObjectId(query.retailerId),
       }),
-      ...(query?.isDeleted
-        ? { deletedAt: { $ne: null } }
-        : { deletedAt: null }),
+      ...(userIsAdmin
+        ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
+        : { isDeleted: false }),
       ...(query?.search && {
         $or: [
           { name: { $regex: query.search, $options: 'i' } },
           { category: { $regex: query.search, $options: 'i' } },
         ],
       }),
-      // ...(userDetail.role !== 'admin' && {
-      //   $or: [
-      //     { retailerId: { $in: userDetail.ownedRetailer } },
-      //     { retailerId: { $in: userDetail.modRetailer } },
-      //     { retailerId: query.retailerId },
-      //   ],
-      // }),
+      ...(!userIsAdmin && {
+        retailerId: {
+          $in: [
+            ...userDetail.ownedRetailer,
+            ...userDetail.modRetailer,
+          ],
+        },
+      }),
     };
 
     const totalCount = await this.goodModel.countDocuments(queryRetailer);
@@ -143,7 +141,7 @@ export class GoodService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select('-isDeleted')
+      .select(userIsAdmin ? '' : '-isDeleted')
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({
         path: 'createdBy',
@@ -174,10 +172,31 @@ export class GoodService {
     return response;
   }
 
-  async findOne(id: string): Promise<GoodDocument> {
+  async findOne(id: string, req): Promise<GoodDocument> {
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const good = await this.goodModel.findById(id).lean().exec();
+      if (!good) {
+        throw new NotFoundException(`Good with ID ${id} not found`);
+      }
+
+      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
+        retailerId => retailerId.toString() === good.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission`);
+      }
+    }
+
     const good = await this.goodModel
       .findById(id)
-      .select('-isDeleted')
+      .where(userIsAdmin ? {} : { isDeleted: false })
+      .select(userIsAdmin ? '' : '-isDeleted')
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({
         path: 'createdBy',
@@ -192,9 +211,11 @@ export class GoodService {
         select: '_id name email avatar',
       })
       .exec();
-    if (!good || good.isDeleted) {
+    
+    if (!good) {
       throw new NotFoundException(`Good with ID ${id} not found`);
     }
+    
     return good;
   }
 
@@ -203,22 +224,46 @@ export class GoodService {
     updateGoodDto: UpdateGoodDto,
     req,
   ): Promise<GoodDocument> {
-    const modifiedBy = (req as any).user?.id;
     const existingGood = await this.goodModel.findById(id).exec();
     if (!existingGood) {
-      throw new NotFoundException(`Good with ID ${id} not found`);
+      throw new NotFoundException('Good not found');
     }
+    
+    if (existingGood.isDeleted) {
+      throw new BadRequestException('Good is deleted');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
+        retailerId => retailerId.toString() === existingGood.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission to update`);
+      }
+    }
+
+    const modifiedBy = user.id;
     const updatedGood = await this.goodModel
       .findByIdAndUpdate(
         id,
         {
           ...updateGoodDto,
+          ...(updateGoodDto.retailerId && {
+            retailerId: new Types.ObjectId(updateGoodDto.retailerId),
+          }),
           lastUpdatedBy: new Types.ObjectId(modifiedBy),
         },
         { new: true },
       )
       .exec();
-    if (!updatedGood || updatedGood.isDeleted) {
+    
+    if (!updatedGood) {
       throw new NotFoundException(`Good with ID ${id} not found`);
     }
 
@@ -230,12 +275,36 @@ export class GoodService {
       oldData: existingGood,
       newData: updatedGood,
     });
+    
     return updatedGood;
   }
 
   async remove(id: string, req): Promise<GoodDocument> {
-    const modifiedBy = (req as any).user?.id;
+    const existingGood = await this.goodModel.findById(id).exec();
+    if (!existingGood) {
+      throw new NotFoundException('Good not found');
+    }
+    
+    if (existingGood.isDeleted) {
+      throw new BadRequestException('Good is already deleted');
+    }
 
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = userDetail.ownedRetailer.some(
+        retailerId => retailerId.toString() === existingGood.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission to delete`);
+      }
+    }
+
+    const modifiedBy = user.id;
     const updatedGood = await this.goodModel
       .findByIdAndUpdate(
         id,
@@ -247,7 +316,8 @@ export class GoodService {
         { new: true },
       )
       .exec();
-    if (!updatedGood || updatedGood.isDeleted) {
+    
+    if (!updatedGood) {
       throw new NotFoundException(`Good with ID ${id} not found`);
     }
 
@@ -256,9 +326,102 @@ export class GoodService {
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.GOODS,
       action: AUDIT_LOG_ACTION_ENUM.DELETE,
-      oldData: updatedGood,
+      oldData: existingGood,
+      newData: updatedGood,
+    });
+    
+    return updatedGood;
+  }
+
+  async hardDelete(id: string, req): Promise<GoodDocument> {
+    const existingGood = await this.goodModel.findById(id).exec();
+    if (!existingGood) {
+      throw new NotFoundException('Good not found');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Chỉ admin mới có quyền hard delete
+    if (!userIsAdmin) {
+      throw new BadRequestException('Only admin can perform hard delete');
+    }
+
+    const modifiedBy = user.id;
+    const deletedGood = await this.goodModel
+      .findByIdAndDelete(id)
+      .lean()
+      .exec();
+    
+    if (!deletedGood) {
+      throw new NotFoundException(`Good with ID ${id} not found`);
+    }
+
+    await this.auditLogsService.createLog({
+      retailerId: new Types.ObjectId(deletedGood.retailerId),
+      modifiedBy: new Types.ObjectId(modifiedBy),
+      module: AUDIT_LOG_MODULE_ENUM.GOODS,
+      action: AUDIT_LOG_ACTION_ENUM.HARD_DELETE,
+      oldData: existingGood,
       newData: null,
     });
-    return updatedGood;
+    
+    return deletedGood as GoodDocument;
+  }
+
+  async restore(id: string, req): Promise<GoodDocument> {
+    const existingGood = await this.goodModel.findById(id).exec();
+    if (!existingGood) {
+      throw new NotFoundException('Good not found');
+    }
+    
+    if (!existingGood.isDeleted) {
+      throw new BadRequestException('Good is not deleted');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = userDetail.ownedRetailer.some(
+        retailerId => retailerId.toString() === existingGood.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission to restore`);
+      }
+    }
+
+    const modifiedBy = user.id;
+    const restoredGood = await this.goodModel
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: false,
+          deletedBy: null,
+          deletedAt: null,
+          lastUpdatedBy: new Types.ObjectId(modifiedBy),
+        },
+        { new: true },
+      )
+      .exec();
+    
+    if (!restoredGood) {
+      throw new NotFoundException(`Good with ID ${id} not found`);
+    }
+
+    await this.auditLogsService.createLog({
+      retailerId: new Types.ObjectId(restoredGood.retailerId),
+      modifiedBy: new Types.ObjectId(modifiedBy),
+      module: AUDIT_LOG_MODULE_ENUM.GOODS,
+      action: AUDIT_LOG_ACTION_ENUM.RESTORE,
+      oldData: existingGood,
+      newData: restoredGood,
+    });
+    
+    return restoredGood;
   }
 }
