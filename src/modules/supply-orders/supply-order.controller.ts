@@ -62,8 +62,11 @@ export class SupplyOrderController {
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  findOne(@Param('id') id: string): Promise<SupplyOrderDocument> {
-    return this.supplyOrderService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request
+  ): Promise<SupplyOrderDocument> {
+    return this.supplyOrderService.findOne(id, req);
   }
 
   @Patch(':id')
@@ -80,12 +83,34 @@ export class SupplyOrderController {
 
   @Delete(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+    roles: [RetailerRole.OWNER],
   })
   remove(
     @Param('id') id: string,
     @Req() req: Request,
   ): Promise<SupplyOrderDocument> {
     return this.supplyOrderService.remove(id, req);
+  }
+
+  @Delete('hard-delete/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  hardDelete(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<SupplyOrderDocument> {
+    return this.supplyOrderService.hardDelete(id, req);
+  }
+
+  @Patch('restore/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER],
+  })
+  restore(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<SupplyOrderDocument> {
+    return this.supplyOrderService.restore(id, req);
   }
 }

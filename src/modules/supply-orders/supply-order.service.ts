@@ -62,16 +62,12 @@ export class SupplyOrderService {
   }
 
   async findAll(query: SupplyOrderFilterDto, req) {
-    const currentPage = parseInt(query?.page) || 1;
-    const pageSize = parseInt(query?.pageSize) || 10;
-
-    // const { billDate, billDateFrom, billDateTo } =
-    //   this.validateAndParseDates(query);
+    const currentPage = parseInt(query?.page?.toString()) || 1;
+    const pageSize = parseInt(query?.pageSize?.toString()) || 10;
 
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
-
-    console.log('supply-orders', userDetail);
+    const userIsAdmin = userDetail.role === 'admin';
 
     const queryRetailer: FilterQuery<SupplyOrder> = {
       ...(query?.supplierId && { supplierId: query.supplierId }),
@@ -79,15 +75,18 @@ export class SupplyOrderService {
         retailerId: new Types.ObjectId(query.retailerId),
       }),
       ...(query?.orderDate && { orderDate: query.orderDate }),
-      isDeleted: query?.isDeleted,
-      isPaidComplete: query?.isPaidComplete,
-      // ...(userDetail.role !== 'admin' && {
-      //   $or: [
-      //     { retailerId: { $in: userDetail.ownedRetailer } },
-      //     { retailerId: { $in: userDetail.modRetailer } },
-      //     { retailerId: query.retailerId },
-      //   ],
-      // }),
+      ...(userIsAdmin
+        ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
+        : { isDeleted: false }),
+      ...(query?.isPaidComplete !== undefined && { isPaidComplete: query?.isPaidComplete }),
+      ...(!userIsAdmin && {
+        retailerId: {
+          $in: [
+            ...userDetail.ownedRetailer,
+            ...userDetail.modRetailer,
+          ],
+        },
+      }),
     };
 
     const totalCount = await this.supplyOrderModel.countDocuments(
@@ -99,7 +98,7 @@ export class SupplyOrderService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select('-createdAt -updatedAt -__v -items -isDeleted')
+      .select(userIsAdmin ? '-createdAt -updatedAt -__v -items' : '-createdAt -updatedAt -__v -items -isDeleted')
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'supplierId', select: '_id name' })
       .populate({
@@ -131,9 +130,30 @@ export class SupplyOrderService {
     return response;
   }
 
-  async findOne(id: string): Promise<SupplyOrderDocument> {
+  async findOne(id: string, req): Promise<SupplyOrderDocument> {
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const supplyOrder = await this.supplyOrderModel.findById(id).lean().exec();
+      if (!supplyOrder) {
+        throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
+      }
+
+      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
+        retailerId => retailerId.toString() === supplyOrder.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`SupplyOrder with ID ${id} not found or you don't have permission`);
+      }
+    }
+
     const supplyOrder = await this.supplyOrderModel
       .findById(id)
+      .where(userIsAdmin ? {} : { isDeleted: false })
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'supplierId', select: '_id name' })
       .populate({
@@ -153,6 +173,7 @@ export class SupplyOrderService {
         select: '_id name email avatar',
       })
       .exec();
+    
     if (!supplyOrder) {
       throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
     }
@@ -165,21 +186,51 @@ export class SupplyOrderService {
     updateSupplyOrderDto: UpdateSupplyOrderDto,
     req,
   ): Promise<SupplyOrderDocument> {
-    const modifiedBy = (req as any).user?.id;
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
     }
+    
+    if (existingSupplyOrder.isDeleted) {
+      throw new BadRequestException('SupplyOrder is deleted');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
+        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`SupplyOrder with ID ${id} not found or you don't have permission to update`);
+      }
+    }
+
+    const modifiedBy = user.id;
     const updateSupplyOrder = await this.supplyOrderModel
       .findByIdAndUpdate(
         id,
         {
           ...updateSupplyOrderDto,
+          ...(updateSupplyOrderDto.retailerId && {
+            retailerId: new Types.ObjectId(updateSupplyOrderDto.retailerId),
+          }),
+          ...(updateSupplyOrderDto.supplierId && {
+            supplierId: new Types.ObjectId(updateSupplyOrderDto.supplierId),
+          }),
           lastUpdatedBy: new Types.ObjectId(modifiedBy),
         },
         { new: true },
       )
       .exec();
+    
+    if (!updateSupplyOrder) {
+      throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
+    }
 
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(updateSupplyOrder.retailerId),
@@ -194,7 +245,31 @@ export class SupplyOrderService {
   }
 
   async remove(id: string, req): Promise<SupplyOrderDocument> {
-    const modifiedBy = (req as any).user?.id;
+    const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
+    if (!existingSupplyOrder) {
+      throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    if (existingSupplyOrder.isDeleted) {
+      throw new BadRequestException('SupplyOrder is already deleted');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = userDetail.ownedRetailer.some(
+        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`SupplyOrder with ID ${id} not found or you don't have permission to delete`);
+      }
+    }
+
+    const modifiedBy = user.id;
     const updatedSupplyOrder = await this.supplyOrderModel
       .findByIdAndUpdate(
         id,
@@ -206,6 +281,7 @@ export class SupplyOrderService {
         { new: true },
       )
       .exec();
+    
     if (!updatedSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
     }
@@ -215,9 +291,102 @@ export class SupplyOrderService {
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
       action: AUDIT_LOG_ACTION_ENUM.DELETE,
-      oldData: updatedSupplyOrder,
+      oldData: existingSupplyOrder,
+      newData: updatedSupplyOrder,
+    });
+    
+    return updatedSupplyOrder;
+  }
+
+  async hardDelete(id: string, req): Promise<SupplyOrderDocument> {
+    const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
+    if (!existingSupplyOrder) {
+      throw new NotFoundException('SupplyOrder not found');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Chỉ admin mới có quyền hard delete
+    if (!userIsAdmin) {
+      throw new BadRequestException('Only admin can perform hard delete');
+    }
+
+    const modifiedBy = user.id;
+    const deletedSupplyOrder = await this.supplyOrderModel
+      .findByIdAndDelete(id)
+      .lean()
+      .exec();
+    
+    if (!deletedSupplyOrder) {
+      throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
+    }
+
+    await this.auditLogsService.createLog({
+      retailerId: new Types.ObjectId(deletedSupplyOrder.retailerId),
+      modifiedBy: new Types.ObjectId(modifiedBy),
+      module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
+      action: AUDIT_LOG_ACTION_ENUM.HARD_DELETE,
+      oldData: existingSupplyOrder,
       newData: null,
     });
-    return updatedSupplyOrder;
+    
+    return deletedSupplyOrder as SupplyOrderDocument;
+  }
+
+  async restore(id: string, req): Promise<SupplyOrderDocument> {
+    const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
+    if (!existingSupplyOrder) {
+      throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    if (!existingSupplyOrder.isDeleted) {
+      throw new BadRequestException('SupplyOrder is not deleted');
+    }
+
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = userDetail.ownedRetailer.some(
+        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+      );
+
+      if (!hasAccess) {
+        throw new NotFoundException(`SupplyOrder with ID ${id} not found or you don't have permission to restore`);
+      }
+    }
+
+    const modifiedBy = user.id;
+    const restoredSupplyOrder = await this.supplyOrderModel
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: false,
+          deletedBy: null,
+          deletedAt: null,
+          lastUpdatedBy: new Types.ObjectId(modifiedBy),
+        },
+        { new: true },
+      )
+      .exec();
+    
+    if (!restoredSupplyOrder) {
+      throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
+    }
+
+    await this.auditLogsService.createLog({
+      retailerId: new Types.ObjectId(restoredSupplyOrder.retailerId),
+      modifiedBy: new Types.ObjectId(modifiedBy),
+      module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
+      action: AUDIT_LOG_ACTION_ENUM.RESTORE,
+      oldData: existingSupplyOrder,
+      newData: restoredSupplyOrder,
+    });
+    
+    return restoredSupplyOrder;
   }
 }
