@@ -18,5 +18,12 @@ export class CreateCustomerDto {
     default: null,
     type: String,
   })
+  profileSrc: number | null;
+
+  @ApiProperty({
+    required: false,
+    default: null,
+    type: String,
+  })
   phoneNumber: number | null;
 }

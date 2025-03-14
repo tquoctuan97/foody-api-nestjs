@@ -18,8 +18,16 @@ export class CreateSupplierDto {
   name: string;
 
   @IsString()
+  @IsNotEmpty()
+  displayName?: string;
+
+  @IsString()
   @IsOptional()
-  contact?: string;
+  profileSrc?: string;
+
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
 }
 
 export class UpdateSupplierDto {
@@ -32,8 +40,16 @@ export class UpdateSupplierDto {
   name?: string;
 
   @IsString()
+  @IsNotEmpty()
+  displayName?: string;
+
+  @IsString()
   @IsOptional()
-  contact?: string;
+  profileSrc?: string;
+
+  @IsString()
+  @IsOptional()
+  phoneNumber?: string;
 
   @IsBoolean()
   @IsOptional()
@@ -51,7 +67,7 @@ export class SupplierFilterDto extends PaginationParams {
 
   @IsString()
   @IsOptional()
-  contact?: string;
+  phoneNumber?: string;
 
   @IsBoolean()
   @IsOptional()

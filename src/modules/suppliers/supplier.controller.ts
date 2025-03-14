@@ -33,9 +33,9 @@ export class SupplierController {
   constructor(private readonly supplierService: SupplierService) {}
 
   @Post()
-  @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [RetailerRole.OWNER, RetailerRole.MOD],
-  })
+  // @SetMetadata(RETAILER_ROLE_KEY, {
+  //   roles: [RetailerRole.OWNER, RetailerRole.MOD],
+  // })
   async create(
     @Body() createSupplierDto: CreateSupplierDto,
     @Req() req,
@@ -63,8 +63,11 @@ export class SupplierController {
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  findOne(@Param('id') id: string): Promise<SupplierDocument> {
-    return this.supplierService.findOne(id);
+  findOne(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<SupplierDocument> {
+    return this.supplierService.findOne(id, req);
   }
 
   @Patch(':id')

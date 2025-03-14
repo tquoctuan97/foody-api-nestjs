@@ -56,7 +56,7 @@ export class CustomersService {
           }),
         },
         {
-          path: 'updatedBy',
+          path: 'lastUpdatedBy',
           transform: (user) => ({
             _id: user._id,
             name: user.name,
@@ -106,7 +106,7 @@ export class CustomersService {
         }),
       },
       {
-        path: 'updatedBy',
+        path: 'lastUpdatedBy',
         transform: (user) => ({
           _id: user._id,
           name: user.name,
@@ -153,7 +153,7 @@ export class CustomersService {
         }),
       },
       {
-        path: 'updatedBy',
+        path: 'lastUpdatedBy',
         transform: (user) => ({
           _id: user._id,
           name: user.name,
@@ -193,7 +193,7 @@ export class CustomersService {
     await customer
       .set({
         ...updateCustomerDto,
-        updatedBy: user.id,
+        lastUpdatedBy: user.id,
         ...(updateCustomerDto.name && {
           slug: convertVietnameseToSlug(updateCustomerDto.name),
         }),
@@ -201,7 +201,7 @@ export class CustomersService {
       .save();
 
     return customer.populate({
-      path: 'updatedBy',
+      path: 'lastUpdatedBy',
       transform: (user) => ({
         _id: user._id,
         name: user.name,

@@ -59,6 +59,8 @@ export class SupplierService {
         throw new ConflictException('Supplier name must be unique.');
       }
 
+      console.error('Failed to create supplier:', error);
+
       throw new InternalServerErrorException('Failed to create supplier.');
     }
   }
@@ -80,14 +82,14 @@ export class SupplierService {
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
 
-    console.log('supplier', userDetail);
+    // console.log('supplier', userDetail);
 
     const queryRetailer: FilterQuery<Supplier> = {
       ...(query?.name && {
         name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
-      ...(query?.contact && {
-        contact: { $regex: query.contact, $options: 'i' },
+      ...(query?.phoneNumber && {
+        phoneNumber: { $regex: query.phoneNumber, $options: 'i' },
       }),
       ...(query?.retailerId && {
         retailerId: new mongoose.Types.ObjectId(query.retailerId),
@@ -98,7 +100,7 @@ export class SupplierService {
       ...(query?.search && {
         $or: [
           { name: { $regex: query.search, $options: 'i' } },
-          { contact: { $regex: query.search, $options: 'i' } },
+          { phoneNumber: { $regex: query.search, $options: 'i' } },
         ],
       }),
       // ...(userDetail.role !== 'admin' && {
@@ -109,7 +111,7 @@ export class SupplierService {
       //   ],
       // }),
     };
-
+    // console.log(userDetail.role !== 'admin');
     const totalCount = await this.supplierModel.countDocuments(queryRetailer);
 
     const data = await this.supplierModel
@@ -117,8 +119,15 @@ export class SupplierService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select('-isDeleted')
-      .populate({ path: 'retailerId', select: '_id name' })
+      .select(
+        userDetail.role !== 'admin' ? '-retailerId -isDeleted' : undefined,
+      )
+      .populate(
+        userDetail.role === 'admin' && {
+          path: 'retailerId',
+          select: '_id name',
+        },
+      )
       .populate({
         path: 'createdBy',
         select: '_id name email avatar',
@@ -147,11 +156,21 @@ export class SupplierService {
 
     return response;
   }
-  async findOne(id: string): Promise<SupplierDocument> {
+  async findOne(id: string, req): Promise<SupplierDocument> {
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+
     const supplier = await this.supplierModel
       .findById(id)
-      .select('-isDeleted')
-      .populate({ path: 'retailerId', select: '_id name' })
+      .select(
+        userDetail.role !== 'admin' ? '-retailerId -isDeleted' : '-isDeleted',
+      )
+      .populate(
+        userDetail.role === 'admin' && {
+          path: 'retailerId',
+          select: '_id name',
+        },
+      )
       .populate({
         path: 'createdBy',
         select: '_id name email avatar',

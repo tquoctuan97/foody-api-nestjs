@@ -11,8 +11,14 @@ export class Supplier extends Document {
   @Prop({ required: true })
   name: string;
 
-  @Prop({ type: String, default: null })
-  contact: string;
+  @Prop({ required: true, trim: true })
+  displayName: string;
+
+  @Prop({ required: false, trim: true, default: null })
+  profileSrc: string;
+
+  @Prop({ required: false, trim: true, default: null })
+  phoneNumber: string | null;
 
   @Prop({ default: false })
   isDeleted: boolean;
