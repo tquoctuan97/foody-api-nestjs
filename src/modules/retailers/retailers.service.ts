@@ -357,6 +357,8 @@ export class RetailerService {
       throw new BadRequestException('Retailer not deleted');
     }
 
+    const existingRetailer = await this.retailerModel.findById(id);
+    
     const updatedRetailer = await this.retailerModel
       .findByIdAndUpdate(
         id,
@@ -383,8 +385,8 @@ export class RetailerService {
       modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.RETAILER,
       action: AUDIT_LOG_ACTION_ENUM.DELETE,
-      oldData: updatedRetailer,
-      newData: null,
+      oldData: existingRetailer,
+      newData: updatedRetailer,
     });
     return updatedRetailer;
   }
@@ -404,6 +406,8 @@ export class RetailerService {
     if (!findRetailer.isDeleted) {
       throw new BadRequestException('Retailer is not deleted');
     }
+
+    const existingRetailer = await this.retailerModel.findById(id);
 
     const updatedRetailer = await this.retailerModel
       .findByIdAndUpdate(
@@ -427,9 +431,9 @@ export class RetailerService {
       retailerId: new mongoose.Types.ObjectId(id),
       modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.RETAILER,
-      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
-      oldData: updatedRetailer,
-      newData: null,
+      action: AUDIT_LOG_ACTION_ENUM.RESTORE,
+      oldData: existingRetailer,
+      newData: updatedRetailer,
     });
     return updatedRetailer;
   }
