@@ -335,7 +335,7 @@ export class GoodService {
       retailerId: new Types.ObjectId(updatedGood.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.GOODS,
-      action: AUDIT_LOG_ACTION_ENUM.DELETE,
+      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
       oldData: existingGood,
       newData: updatedGood,
     });

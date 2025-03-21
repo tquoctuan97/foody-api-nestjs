@@ -307,7 +307,7 @@ export class SupplierService {
       retailerId: new mongoose.Types.ObjectId(updatedSupplier.retailerId),
       modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLIER,
-      action: AUDIT_LOG_ACTION_ENUM.DELETE,
+      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
       oldData: existingSupplier,
       newData: updatedSupplier,
     });
