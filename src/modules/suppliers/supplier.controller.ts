@@ -110,7 +110,7 @@ export class SupplierController {
 
   @Patch('restore/:id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [],
+    roles: [RetailerRole.OWNER],
   })
   async restore(@Param('id') id: string, @Req() req): Promise<SupplierDocument> {
     const restoredSupplier = await this.supplierService.restore(id, req);

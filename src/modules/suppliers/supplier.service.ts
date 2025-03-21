@@ -82,18 +82,22 @@ export class SupplierService {
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.some(
+      retailerId => retailerId.toString() === query?.retailerId?.toString()
+    );
 
     const queryRetailer: FilterQuery<Supplier> = {
+      ...(query?.retailerId && {
+        retailerId: new mongoose.Types.ObjectId(query.retailerId),
+      }),
       ...(query?.name && {
         name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
       ...(query?.phoneNumber && {
         phoneNumber: { $regex: query.phoneNumber, $options: 'i' },
       }),
-      ...(query?.retailerId && {
-        retailerId: new mongoose.Types.ObjectId(query.retailerId),
-      }),
-      ...(userIsAdmin
+    
+      ...(userIsAdmin || userIsOwner
         ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
         : { isDeleted: false }),
       ...(query?.search && {
@@ -102,14 +106,20 @@ export class SupplierService {
           { phoneNumber: { $regex: query.search, $options: 'i' } },
         ],
       }),
-      ...(!userIsAdmin && {
-        retailerId: {
-          $in: [
-            ...userDetail.ownedRetailer,
-            ...userDetail.modRetailer,
-          ],
-        },
+      ...(!userIsAdmin && !userIsOwner && {
+        $and: [
+          {
+            retailerId: {
+              $in: [
+                ...userDetail.ownedRetailer,
+                ...userDetail.modRetailer,
+              ],
+            }
+          },
+          ...(query?.retailerId ? [{ retailerId: new mongoose.Types.ObjectId(query.retailerId) }] : [])
+        ]
       }),
+      
     };
 
     const totalCount = await this.supplierModel.countDocuments(queryRetailer);
@@ -119,9 +129,9 @@ export class SupplierService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select(userIsAdmin ? '' : '-isDeleted')
+      .select(userIsAdmin || userIsOwner ? '' : '-isDeleted')
       .populate(
-        userIsAdmin && {
+        (userIsAdmin || userIsOwner) && {
           path: 'retailerId',
           select: '_id name',
         },
@@ -156,32 +166,23 @@ export class SupplierService {
   }
 
   async findOne(id: string, req): Promise<SupplierDocument> {
+    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
+    if (!existingSupplier) {
+      throw new NotFoundException('Supplier not found');
+    }
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.includes(existingSupplier.retailerId);
 
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const supplier = await this.supplierModel.findById(id).lean().exec();
-      if (!supplier) {
-        throw new NotFoundException(`Supplier with ID ${id} not found`);
-      }
-
-      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === supplier.retailerId.toString()
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(`Supplier with ID ${id} not found or you don't have permission`);
-      }
-    }
 
     const supplier = await this.supplierModel
       .findById(id)
-      .where(userIsAdmin ? {} : { isDeleted: false })
-      .select(userIsAdmin ? '' : '-isDeleted')
+      .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
+      .select( (userIsOwner || userIsAdmin) ? '' : '-isDeleted')
       .populate(
-        userIsAdmin && {
+        (userIsOwner || userIsAdmin) && {
           path: 'retailerId',
           select: '_id name',
         },
@@ -212,7 +213,7 @@ export class SupplierService {
     updateSupplierDto: UpdateSupplierDto,
     req,
   ): Promise<SupplierDocument> {
-    const existingSupplier = await this.supplierModel.findById(id).exec();
+    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
     }
@@ -222,19 +223,9 @@ export class SupplierService {
     }
 
     const user = (req as any).user;
-    const userDetail = await this.userService.findById(user.id);
-    const userIsAdmin = userDetail.role === 'admin';
+    // const userDetail = await this.userService.findById(user.id);
+    // const userIsAdmin = userDetail.role === 'admin';
 
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingSupplier.retailerId.toString()
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(`Supplier with ID ${id} not found or you don't have permission to update`);
-      }
-    }
 
     const modifiedBy = user.id;
     const updatedSupplier = await this.supplierModel
@@ -270,7 +261,7 @@ export class SupplierService {
   }
 
   async remove(id: string, req): Promise<SupplierDocument> {
-    const existingSupplier = await this.supplierModel.findById(id).exec();
+    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
     }
@@ -325,7 +316,7 @@ export class SupplierService {
   }
 
   async hardDelete(id: string, req): Promise<SupplierDocument> {
-    const existingSupplier = await this.supplierModel.findById(id).exec();
+    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
     }
@@ -362,7 +353,7 @@ export class SupplierService {
   }
 
   async restore(id: string, req): Promise<SupplierDocument> {
-    const existingSupplier = await this.supplierModel.findById(id).exec();
+    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
     }
@@ -398,7 +389,7 @@ export class SupplierService {
         },
         { new: true },
       )
-      .exec();
+      .exec()
     
     if (!restoredSupplier) {
       throw new NotFoundException(`Supplier with ID ${id} not found`);

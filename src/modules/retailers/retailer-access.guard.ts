@@ -33,6 +33,7 @@ export class RetailerRoleGuard implements CanActivate {
     );
 
     if (!retailerRoleOptions) {
+      console.log('NO ROLE OPTIONS');
       return true;
     }
 
@@ -41,6 +42,7 @@ export class RetailerRoleGuard implements CanActivate {
     const retailerId =
       request.query.retailerId ||
       request.params.retailerId ||
+      request.body.retailerId 
       request.query.id ||
       request.params.id;
 
@@ -54,6 +56,7 @@ export class RetailerRoleGuard implements CanActivate {
     }
 
     if (!retailerId) {
+      console.log('NO RETAILER ID');
       return false;
     }
 
@@ -67,6 +70,7 @@ export class RetailerRoleGuard implements CanActivate {
     );
 
     if (!userIsOwner && !userIsMod) {
+      console.log('NO USER IS OWNER OR MOD', userDetails, retailerId);
       return false;
     }
 
@@ -83,9 +87,11 @@ export class RetailerRoleGuard implements CanActivate {
       userIsMod,
     });
     if (!canAccessAsOwner && !canAccessAsMod) {
+      console.log('CAN NOT ACCESS');
       return false;
     }
 
+    console.log('CAN ACCESS');
     return true;
   }
 }
