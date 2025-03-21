@@ -104,6 +104,9 @@ export class GoodService {
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.some(
+      retailerId => retailerId.toString() === query?.retailerId?.toString()
+    );
 
     const queryRetailer: FilterQuery<Good> = {
       ...(query?.name && {
@@ -115,7 +118,7 @@ export class GoodService {
       ...(query?.retailerId && {
         retailerId: new Types.ObjectId(query.retailerId),
       }),
-      ...(userIsAdmin
+      ...(userIsAdmin || userIsOwner
         ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
         : { isDeleted: false }),
       ...(query?.search && {
@@ -124,13 +127,18 @@ export class GoodService {
           { category: { $regex: query.search, $options: 'i' } },
         ],
       }),
-      ...(!userIsAdmin && {
-        retailerId: {
-          $in: [
-            ...userDetail.ownedRetailer,
-            ...userDetail.modRetailer,
-          ],
-        },
+      ...(!userIsAdmin && !userIsOwner && {
+        $and: [
+          {
+            retailerId: {
+              $in: [
+                ...userDetail.ownedRetailer,
+                ...userDetail.modRetailer,
+              ],
+            }
+          },
+          ...(query?.retailerId ? [{ retailerId: new Types.ObjectId(query.retailerId) }] : [])
+        ]
       }),
     };
 
@@ -141,8 +149,13 @@ export class GoodService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select(userIsAdmin ? '' : '-isDeleted')
-      .populate({ path: 'retailerId', select: '_id name' })
+      .select(userIsAdmin || userIsOwner ? '' : '-isDeleted')
+      .populate(
+        (userIsAdmin || userIsOwner) && {
+          path: 'retailerId',
+          select: '_id name',
+        },
+      )
       .populate({
         path: 'createdBy',
         select: '_id name email avatar',
@@ -173,31 +186,28 @@ export class GoodService {
   }
 
   async findOne(id: string, req): Promise<GoodDocument> {
+    const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
+    if (!existingGood) {
+      throw new NotFoundException('Good not found');
+    }
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const good = await this.goodModel.findById(id).lean().exec();
-      if (!good) {
-        throw new NotFoundException(`Good with ID ${id} not found`);
-      }
-
-      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === good.retailerId.toString()
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission`);
-      }
-    }
+    const userIsOwner = userDetail.ownedRetailer.some(
+      retailerId => retailerId.toString() === existingGood.retailerId.toString()
+    );
 
     const good = await this.goodModel
       .findById(id)
-      .where(userIsAdmin ? {} : { isDeleted: false })
-      .select(userIsAdmin ? '' : '-isDeleted')
-      .populate({ path: 'retailerId', select: '_id name' })
+      .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
+      .select((userIsOwner || userIsAdmin) ? '' : '-isDeleted')
+      .populate(
+        (userIsOwner || userIsAdmin) && {
+          path: 'retailerId',
+          select: '_id name',
+        },
+      )
       .populate({
         path: 'createdBy',
         select: '_id name email avatar',
@@ -224,7 +234,7 @@ export class GoodService {
     updateGoodDto: UpdateGoodDto,
     req,
   ): Promise<GoodDocument> {
-    const existingGood = await this.goodModel.findById(id).exec();
+    const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
     }
@@ -371,7 +381,7 @@ export class GoodService {
   }
 
   async restore(id: string, req): Promise<GoodDocument> {
-    const existingGood = await this.goodModel.findById(id).exec();
+    const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
     }

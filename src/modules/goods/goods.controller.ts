@@ -109,7 +109,7 @@ export class GoodController {
 
   @Patch('restore/:id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [],
+    roles: [RetailerRole.OWNER],
   })
   async restore(
     @Param('id') id: string,
