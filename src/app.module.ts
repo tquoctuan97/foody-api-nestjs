@@ -10,6 +10,7 @@ import { AuditLogsModule } from './modules/audit-logs/audit-logs.module';
 import { SupplierModule } from './modules/suppliers/supplier.module';
 import { GoodsModule } from './modules/goods/goods.module';
 import { SupplyOrderModule } from './modules/supply-orders/supply-order.module';
+import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -26,6 +27,7 @@ import { SupplyOrderModule } from './modules/supply-orders/supply-order.module';
     SupplyOrderModule,
     GoodsModule,
     AuditLogsModule,
+    PurchaseOrdersModule,
   ],
   // providers: [
   //   {

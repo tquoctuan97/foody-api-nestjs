@@ -16,5 +16,6 @@ import { RetailersModule } from '../retailers/retailers.module';
   ],
   controllers: [GoodController],
   providers: [GoodService],
+  exports: [GoodService],
 })
 export class GoodsModule {}
