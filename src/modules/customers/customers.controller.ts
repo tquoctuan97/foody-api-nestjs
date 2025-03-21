@@ -8,26 +8,32 @@ import {
   Patch,
   Post,
   Query,
-  Request,
+  Req,
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
 import { CustomersService } from './customers.service';
-import { CreateCustomerDto } from './dto/create-customer.dto';
-import { UpdateCustomerDto } from './dto/update-customer.dto';
+import { CreateCustomerDto, CustomerFilterDto, UpdateCustomerDto } from './dto/customer.dto';
 import { Customer, CustomerDocument } from './entities/customer.entity';
-import { CustomerParams } from './models/customer.model';
 import {
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
 } from '../retailers/retailer-access.guard';
 
+interface AuthenticatedRequest extends Request {
+  user?: {
+    id?: string;
+    retailerId: string;
+  };
+}
+
+@ApiBearerAuth()
 @Controller('api/v1/admin/customers')
 @UseGuards(RetailerRoleGuard)
-@ApiTags('bill-maker/customers')
+@ApiTags('customers')
 export class CustomersController {
   constructor(private readonly customersService: CustomersService) {}
 
@@ -35,21 +41,25 @@ export class CustomersController {
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  getAll(
-    @Query() query: CustomerParams,
+  findAll(
+    @Query() query: CustomerFilterDto,
+    @Req() req: AuthenticatedRequest,
     @Query('isDeleted', new ParseBoolPipe({ optional: true }))
     isDeleted?: boolean,
   ) {
     query.isDeleted = isDeleted;
-    return this.customersService.getAll(query);
+    return this.customersService.findAll(query, req);
   }
 
   @Get(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  getOne(@Param('id', IsObjectIdPipe) id: string): Promise<CustomerDocument> {
-    return this.customersService.getOne(id);
+  findOne(
+    @Param('id', IsObjectIdPipe) id: string,
+    @Req() req: AuthenticatedRequest
+  ): Promise<CustomerDocument> {
+    return this.customersService.findOne(id, req);
   }
 
   @Post()
@@ -59,27 +69,55 @@ export class CustomersController {
   @ApiCreatedResponse({
     type: Customer,
   })
-  create(@Request() req, @Body() createCustomerDto: CreateCustomerDto) {
-    return this.customersService.create(req.user, createCustomerDto);
+  async create(
+    @Body() createCustomerDto: CreateCustomerDto,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CustomerDocument> {
+    return await this.customersService.create(createCustomerDto, req);
   }
 
   @Patch(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
     roles: [RetailerRole.OWNER, RetailerRole.MOD],
   })
-  update(
-    @Request() req,
+  async update(
     @Param('id', IsObjectIdPipe) id: string,
     @Body() updateCustomerDto: UpdateCustomerDto,
-  ) {
-    return this.customersService.update(req.user, id, updateCustomerDto);
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CustomerDocument> {
+    return await this.customersService.update(id, updateCustomerDto, req);
   }
 
   @Delete(':id')
   @SetMetadata(RETAILER_ROLE_KEY, {
-    roles: [RetailerRole.OWNER, RetailerRole.MOD],
+    roles: [RetailerRole.OWNER],
   })
-  delete(@Request() req, @Param('id', IsObjectIdPipe) id: string) {
-    return this.customersService.delete(req.user, id);
+  async remove(
+    @Param('id', IsObjectIdPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CustomerDocument> {
+    return await this.customersService.remove(id, req);
+  }
+
+  @Delete('hard-delete/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [],
+  })
+  async hardDelete(
+    @Param('id', IsObjectIdPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CustomerDocument> {
+    return await this.customersService.hardDelete(id, req);
+  }
+
+  @Patch('restore/:id')
+  @SetMetadata(RETAILER_ROLE_KEY, {
+    roles: [RetailerRole.OWNER],
+  })
+  async restore(
+    @Param('id', IsObjectIdPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<CustomerDocument> {
+    return await this.customersService.restore(id, req);
   }
 }
