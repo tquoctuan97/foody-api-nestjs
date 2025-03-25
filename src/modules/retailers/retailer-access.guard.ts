@@ -1,7 +1,6 @@
 import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { UsersService } from '../users/users.service';
-import { RetailerService } from './retailers.service';
 import { Types } from 'mongoose';
 
 // Định nghĩa metadata key để sử dụng trong controller
@@ -24,7 +23,6 @@ export class RetailerRoleGuard implements CanActivate {
   constructor(
     private reflector: Reflector,
     private usersService: UsersService,
-    private retailerService: RetailerService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
