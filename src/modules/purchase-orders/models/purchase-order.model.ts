@@ -23,13 +23,6 @@ export class PurchaseOrderFilterDto extends PaginationParams {
   orderDateTo?: string;
 
   @ApiPropertyOptional({
-    description: 'ID của cửa hàng',
-  })
-  @IsOptional()
-  @IsMongoId()
-  retailerId?: string;
-
-  @ApiPropertyOptional({
     description: 'ID của khách hàng',
   })
   @IsOptional()

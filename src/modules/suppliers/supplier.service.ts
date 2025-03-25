@@ -21,6 +21,7 @@ import { Supplier, SupplierDocument } from './entities/supplier.entity';
 import { UsersService } from '../users/users.service';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { RetailerService } from '../retailers/retailers.service';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class SupplierService {
@@ -36,9 +37,15 @@ export class SupplierService {
     createSupplierDto: CreateSupplierDto,
     req,
   ): Promise<SupplierDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const supplier = new this.supplierModel({
       ...createSupplierDto,
-      retailerId: new mongoose.Types.ObjectId(createSupplierDto.retailerId),
+      retailerId: new mongoose.Types.ObjectId(retailerId),
       createdBy: new mongoose.Types.ObjectId(req.user.id),
     });
     const modifiedBy = (req as any).user?.id;
@@ -78,18 +85,21 @@ export class SupplierService {
   async findAll(query: SupplierFilterDto, req) {
     const currentPage = parseInt(query?.page?.toString()) || 1;
     const pageSize = parseInt(query?.pageSize?.toString()) || 10;
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
 
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === query?.retailerId?.toString()
+      id => id.toString() === retailerId.toString()
     );
 
     const queryRetailer: FilterQuery<Supplier> = {
-      ...(query?.retailerId && {
-        retailerId: new mongoose.Types.ObjectId(query.retailerId),
-      }),
+      retailerId: new mongoose.Types.ObjectId(retailerId),
       ...(query?.name && {
         name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
@@ -116,7 +126,7 @@ export class SupplierService {
               ],
             }
           },
-          ...(query?.retailerId ? [{ retailerId: new mongoose.Types.ObjectId(query.retailerId) }] : [])
+          { retailerId: new mongoose.Types.ObjectId(retailerId) }
         ]
       }),
       
@@ -166,16 +176,26 @@ export class SupplierService {
   }
 
   async findOne(id: string, req): Promise<SupplierDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
+    }
+    
+    // Verify that the supplier belongs to the retailer in the header
+    if (existingSupplier.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Supplier not found for this retailer');
     }
     
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.includes(existingSupplier.retailerId);
-
 
     const supplier = await this.supplierModel
       .findById(id)
@@ -213,57 +233,77 @@ export class SupplierService {
     updateSupplierDto: UpdateSupplierDto,
     req,
   ): Promise<SupplierDocument> {
-    const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
-    if (!existingSupplier) {
-      throw new NotFoundException('Supplier not found');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
     }
     
-    if (existingSupplier.isDeleted) {
-      throw new BadRequestException('Supplier is deleted');
+    try {
+      const existingSupplier = await this.supplierModel.findById(id).exec();
+      if (!existingSupplier) {
+        throw new NotFoundException('Supplier not found');
+      }
+      
+      // Verify that the supplier belongs to the retailer in the header
+      if (existingSupplier.retailerId.toString() !== retailerId.toString()) {
+        throw new NotFoundException('Supplier not found for this retailer');
+      }
+
+      const modifiedBy = (req as any).user?.id;
+
+      const oldSupplier = { ...existingSupplier.toObject() };
+
+      const updateData = {
+        ...updateSupplierDto,
+        lastUpdatedBy: new mongoose.Types.ObjectId(modifiedBy),
+      };
+
+      const updatedSupplier = await this.supplierModel
+        .findByIdAndUpdate(id, updateData, { new: true })
+        .exec();
+
+      // Create audit log
+      await this.auditLogsService.createLog({
+        retailerId: new mongoose.Types.ObjectId(updatedSupplier.retailerId),
+        modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
+        module: AUDIT_LOG_MODULE_ENUM.SUPPLIER,
+        action: AUDIT_LOG_ACTION_ENUM.UPDATE,
+        oldData: oldSupplier,
+        newData: updatedSupplier,
+      });
+
+      return updatedSupplier;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      if (error.code === 11000) {
+        throw new ConflictException('Supplier name must be unique.');
+      }
+
+      console.error('Failed to update supplier:', error);
+
+      throw new InternalServerErrorException('Failed to update supplier.');
     }
-
-    const user = (req as any).user;
-    // const userDetail = await this.userService.findById(user.id);
-    // const userIsAdmin = userDetail.role === 'admin';
-
-
-    const modifiedBy = user.id;
-    const updatedSupplier = await this.supplierModel
-      .findByIdAndUpdate(
-        id,
-        {
-          ...updateSupplierDto,
-          ...(updateSupplierDto.retailerId && {
-            retailerId: new mongoose.Types.ObjectId(
-              updateSupplierDto.retailerId,
-            ),
-          }),
-          lastUpdatedBy: new mongoose.Types.ObjectId(modifiedBy),
-        },
-        { new: true },
-      )
-      .exec();
-    
-    if (!updatedSupplier) {
-      throw new NotFoundException(`Supplier with ID ${id} not found`);
-    }
-
-    await this.auditLogsService.createLog({
-      retailerId: new mongoose.Types.ObjectId(updatedSupplier.retailerId),
-      modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
-      module: AUDIT_LOG_MODULE_ENUM.SUPPLIER,
-      action: AUDIT_LOG_ACTION_ENUM.UPDATE,
-      oldData: existingSupplier,
-      newData: updatedSupplier,
-    });
-
-    return updatedSupplier;
   }
 
   async remove(id: string, req): Promise<SupplierDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
+    }
+    
+    // Verify that the supplier belongs to the retailer in the header
+    if (existingSupplier.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Supplier not found for this retailer');
     }
     
     if (existingSupplier.isDeleted) {
@@ -316,9 +356,20 @@ export class SupplierService {
   }
 
   async hardDelete(id: string, req): Promise<SupplierDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
+    }
+    
+    // Verify that the supplier belongs to the retailer in the header
+    if (existingSupplier.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Supplier not found for this retailer');
     }
 
     const user = (req as any).user;
@@ -353,9 +404,20 @@ export class SupplierService {
   }
 
   async restore(id: string, req): Promise<SupplierDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplier = await this.supplierModel.findById(new mongoose.Types.ObjectId(id)).exec();
     if (!existingSupplier) {
       throw new NotFoundException('Supplier not found');
+    }
+    
+    // Verify that the supplier belongs to the retailer in the header
+    if (existingSupplier.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Supplier not found for this retailer');
     }
     
     if (!existingSupplier.isDeleted) {

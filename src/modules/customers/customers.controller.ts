@@ -12,12 +12,13 @@ import {
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiHeader, ApiTags } from '@nestjs/swagger';
 import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
 import { CustomersService } from './customers.service';
 import { CreateCustomerDto, CustomerFilterDto, UpdateCustomerDto } from './dto/customer.dto';
 import { Customer, CustomerDocument } from './entities/customer.entity';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
@@ -31,6 +32,11 @@ interface AuthenticatedRequest extends Request {
 }
 
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @Controller('api/v1/admin/customers')
 @UseGuards(RetailerRoleGuard)
 @ApiTags('customers')

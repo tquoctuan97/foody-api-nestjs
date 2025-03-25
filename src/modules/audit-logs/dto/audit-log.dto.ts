@@ -12,10 +12,6 @@ import { PaginationParams } from 'src/common/pagination/pagination.model';
 export class CreateAuditLogDto {
   @IsMongoId()
   @IsNotEmpty()
-  retailerId: Types.ObjectId;
-
-  @IsMongoId()
-  @IsNotEmpty()
   modifiedBy: Types.ObjectId;
 
   @IsString()
@@ -36,10 +32,6 @@ export class CreateAuditLogDto {
 }
 
 export class AuditLogFilterDto extends PaginationParams {
-  @IsMongoId()
-  @IsOptional()
-  retailerId?: Types.ObjectId;
-
   @IsMongoId()
   @IsOptional()
   modifiedBy?: Types.ObjectId;

@@ -16,6 +16,7 @@ import { CreatePurchaseOrderDto } from './dto/create-purchase-order.dto';
 import { UpdatePurchaseOrderDto } from './dto/update-purchase-order.dto';
 import { PurchaseOrder, PurchaseOrderDocument } from './entities/purchase-order.entity';
 import { PurchaseOrderFilterDto } from './models/purchase-order.model';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class PurchaseOrdersService {
@@ -74,13 +75,19 @@ export class PurchaseOrdersService {
     req,
   ): Promise<PurchaseOrderDocument> {
     try {
+      const retailerId = req.headers[RETAILER_ID_HEADER];
+      
+      if (!retailerId) {
+        throw new BadRequestException('RetailerId is required in x-retailer-id header');
+      }
+      
       const userId = req.user.id;
       const userDetail = await this.userService.findById(userId);
       
       // Kiểm tra quyền truy cập vào retailer
       const canAccessRetailer = userDetail.role === 'admin' || 
-        userDetail.ownedRetailer.some(id => id.toString() === createPurchaseOrderDto.retailerId) ||
-        userDetail.modRetailer.some(id => id.toString() === createPurchaseOrderDto.retailerId);
+        userDetail.ownedRetailer.some(id => id.toString() === retailerId) ||
+        userDetail.modRetailer.some(id => id.toString() === retailerId);
       
       if (!canAccessRetailer) {
         throw new ForbiddenException('Bạn không có quyền tạo đơn đặt hàng cho cửa hàng này');
@@ -95,7 +102,7 @@ export class PurchaseOrdersService {
 
       const purchaseOrder = new this.purchaseOrderModel({
         ...createPurchaseOrderDto,
-        retailerId: new mongoose.Types.ObjectId(createPurchaseOrderDto.retailerId),
+        retailerId: new mongoose.Types.ObjectId(retailerId),
         customerId: new mongoose.Types.ObjectId(createPurchaseOrderDto.customerId),
         createdBy: new mongoose.Types.ObjectId(userId),
       });
@@ -115,7 +122,7 @@ export class PurchaseOrdersService {
       return savedPurchaseOrder;
     } catch (error) {
       console.error('Failed to create purchase order:', error);
-      if (error instanceof ForbiddenException) {
+      if (error instanceof ForbiddenException || error instanceof BadRequestException) {
         throw error;
       }
       throw new InternalServerErrorException('Không thể tạo đơn đặt hàng');
@@ -128,6 +135,11 @@ export class PurchaseOrdersService {
   async findAll(query: PurchaseOrderFilterDto, req): Promise<PaginationDto<PurchaseOrderDocument[]>> {
     const currentPage = parseInt(query?.page?.toString()) || 1;
     const pageSize = parseInt(query?.pageSize?.toString()) || 10;
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
 
     const { orderDate, orderDateFrom, orderDateTo } = this.validateAndParseDates(query);
 
@@ -135,17 +147,12 @@ export class PurchaseOrdersService {
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === query?.retailerId?.toString()
+      id => id.toString() === retailerId
     );
-    // const userIsMod = userDetail.modRetailer.some(
-    //   retailerId => retailerId.toString() === query?.retailerId?.toString()
-    // );
 
     // Xây dựng query filter
     const queryFilter: FilterQuery<PurchaseOrder> = {
-      ...(query?.retailerId && {
-        retailerId: new mongoose.Types.ObjectId(query.retailerId),
-      }),
+      retailerId: new mongoose.Types.ObjectId(retailerId),
       ...(query?.customerId && {
         customerId: new mongoose.Types.ObjectId(query.customerId),
       }),
@@ -166,7 +173,7 @@ export class PurchaseOrdersService {
         : { isDeleted: false }),
       
       // Đảm bảo user chỉ có thể xem các đơn hàng trong retailer mà họ có quyền
-      ...(!userIsAdmin && {
+      ...(!userIsAdmin && !userIsOwner && {
         $and: [
           {
             retailerId: {
@@ -176,7 +183,7 @@ export class PurchaseOrdersService {
               ],
             }
           },
-          ...(query?.retailerId ? [{ retailerId: new mongoose.Types.ObjectId(query.retailerId) }] : [])
+          { retailerId: new mongoose.Types.ObjectId(retailerId) }
         ]
       }),
     };
@@ -199,15 +206,19 @@ export class PurchaseOrdersService {
           select: '_id name displayName phoneNumber',
         },
         {
-          path: 'items.goodId',
-          select: '_id name description category unit',
-        },
-        ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
-          path,
+          path: 'createdBy',
           select: '_id name email avatar',
-        })),
+        },
+        {
+          path: 'lastUpdatedBy',
+          select: '_id name email avatar',
+        },
+        {
+          path: 'deletedBy',
+          select: '_id name email avatar',
+        },
       ])
-      .lean()
+      .lean<PurchaseOrderDocument[]>()
       .exec();
 
     return new PaginationDto<PurchaseOrderDocument[]>(data, {
@@ -223,8 +234,43 @@ export class PurchaseOrdersService {
    * Lấy thông tin chi tiết một đơn đặt hàng
    */
   async findOne(id: string, req): Promise<PurchaseOrderDocument> {
-    if (!mongoose.isValidObjectId(id)) {
-      throw new BadRequestException('ID không hợp lệ');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingOrder = await this.purchaseOrderModel.findById(id).lean().exec();
+    if (!existingOrder) {
+      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
+    }
+    
+    // Verify that the purchase order belongs to the retailer in the header
+    if (existingOrder.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng cho cửa hàng này');
+    }
+    
+    const user = req.user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.some(
+      id => id.toString() === retailerId
+    );
+
+    // Nếu không phải admin hoặc owner, kiểm tra xem user có quyền truy cập hay không
+    if (!userIsAdmin && !userIsOwner) {
+      const hasModerator = userDetail.modRetailer.some(
+        id => id.toString() === retailerId
+      );
+      
+      if (!hasModerator) {
+        throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
+      }
+      
+      // Không cho phép xem đơn đã xóa nếu không phải admin/owner
+      if (existingOrder.isDeleted) {
+        throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
+      }
     }
 
     const purchaseOrder = await this.purchaseOrderModel
@@ -240,38 +286,22 @@ export class PurchaseOrdersService {
         },
         {
           path: 'items.goodId',
-          select: '_id name description category unit',
+          select: '_id name unit description category',
         },
-        ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
-          path,
+        {
+          path: 'createdBy',
           select: '_id name email avatar',
-        })),
+        },
+        {
+          path: 'lastUpdatedBy',
+          select: '_id name email avatar',
+        },
+        {
+          path: 'deletedBy',
+          select: '_id name email avatar',
+        },
       ])
       .exec();
-
-    if (!purchaseOrder) {
-      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
-    }
-
-    // Kiểm tra quyền truy cập
-    const user = req.user;
-    const userDetail = await this.userService.findById(user.id);
-    const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
-    const userIsMod = userDetail.modRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
-
-    if (!userIsAdmin && !userIsOwner && !userIsMod) {
-      throw new ForbiddenException('Bạn không có quyền xem đơn đặt hàng này');
-    }
-
-    // Kiểm tra xem có thể xem đơn hàng đã xóa không
-    if (purchaseOrder.isDeleted && !userIsAdmin && !userIsOwner) {
-      throw new ForbiddenException('Bạn không có quyền xem đơn đặt hàng này');
-    }
 
     return purchaseOrder;
   }
@@ -284,252 +314,311 @@ export class PurchaseOrdersService {
     updatePurchaseOrderDto: UpdatePurchaseOrderDto,
     req,
   ): Promise<PurchaseOrderDocument> {
-    if (!mongoose.isValidObjectId(id)) {
-      throw new BadRequestException('ID không hợp lệ');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
     }
-
-    const purchaseOrder = await this.purchaseOrderModel.findById(id);
-
-    if (!purchaseOrder) {
-      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
+    
+    const existingOrder = await this.purchaseOrderModel.findById(id).exec();
+    if (!existingOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng');
     }
-
-    if (purchaseOrder.isDeleted) {
+    
+    // Verify that the purchase order belongs to the retailer in the header
+    if (existingOrder.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng cho cửa hàng này');
+    }
+    
+    if (existingOrder.isDeleted) {
       throw new BadRequestException('Không thể cập nhật đơn đặt hàng đã xóa');
     }
 
-    // Kiểm tra quyền truy cập
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
-    const userIsMod = userDetail.modRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
 
-    if (!userIsAdmin && !userIsOwner && !userIsMod) {
-      throw new ForbiddenException('Bạn không có quyền cập nhật đơn đặt hàng này');
+    // Kiểm tra quyền truy cập
+    if (!userIsAdmin) {
+      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
+        id => id.toString() === retailerId
+      );
+
+      if (!hasAccess) {
+        throw new ForbiddenException('Bạn không có quyền cập nhật đơn đặt hàng này');
+      }
     }
 
-    // Tạo audit log trước khi cập nhật
-    const oldData = purchaseOrder.toObject();
+    try {
+      // Xử lý thông tin hàng hóa nếu có cập nhật items
+      let itemsToUpdate = updatePurchaseOrderDto.items;
+      if (itemsToUpdate && itemsToUpdate.length > 0) {
+        itemsToUpdate = await this.fillGoodsInfo(itemsToUpdate, req);
+      }
 
-    // Chỉ điền thông tin tên sản phẩm nếu cần
-    if (updatePurchaseOrderDto.items && updatePurchaseOrderDto.items.length > 0) {
-      updatePurchaseOrderDto.items = await this.fillGoodsInfo(updatePurchaseOrderDto.items, req);
+      const oldOrder = { ...existingOrder.toObject() };
+      
+      const updateData = {
+        ...updatePurchaseOrderDto,
+        ...(itemsToUpdate && { items: itemsToUpdate }),
+        lastUpdatedBy: new mongoose.Types.ObjectId(user.id),
+      };
+
+      const updatedOrder = await this.purchaseOrderModel
+        .findByIdAndUpdate(id, updateData, { new: true })
+        .exec();
+
+      if (!updatedOrder) {
+        throw new NotFoundException('Không tìm thấy đơn đặt hàng sau khi cập nhật');
+      }
+
+      // Tạo audit log
+      await this.auditLogsService.createLog({
+        retailerId: new mongoose.Types.ObjectId(updatedOrder.retailerId),
+        modifiedBy: new mongoose.Types.ObjectId(user.id),
+        module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
+        action: AUDIT_LOG_ACTION_ENUM.UPDATE,
+        oldData: oldOrder,
+        newData: updatedOrder,
+      });
+
+      return updatedOrder;
+    } catch (error) {
+      console.error('Failed to update purchase order:', error);
+      if (error instanceof NotFoundException || error instanceof BadRequestException || error instanceof ForbiddenException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Không thể cập nhật đơn đặt hàng');
     }
-
-    // Không tính toán lại subtotal và total, giữ nguyên giá trị được gửi từ frontend
-
-    // Cập nhật dữ liệu
-    const updateData = {
-      ...updatePurchaseOrderDto,
-      ...(updatePurchaseOrderDto.retailerId && {
-        retailerId: new mongoose.Types.ObjectId(updatePurchaseOrderDto.retailerId),
-      }),
-      ...(updatePurchaseOrderDto.customerId && {
-        customerId: new mongoose.Types.ObjectId(updatePurchaseOrderDto.customerId),
-      }),
-      updatedBy: new mongoose.Types.ObjectId(user.id),
-    };
-
-    const updatedPurchaseOrder = await this.purchaseOrderModel
-      .findByIdAndUpdate(id, updateData, { new: true })
-      .populate([
-        {
-          path: 'retailerId',
-          select: '_id name',
-        },
-        {
-          path: 'customerId',
-          select: '_id name displayName phoneNumber',
-        },
-        ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
-          path,
-          select: '_id name email avatar',
-        })),
-      ])
-      .exec();
-
-    // Lưu audit log
-    await this.auditLogsService.createLog({
-      retailerId: new mongoose.Types.ObjectId(updatedPurchaseOrder.retailerId),
-      modifiedBy: new mongoose.Types.ObjectId(user.id),
-      module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
-      action: AUDIT_LOG_ACTION_ENUM.UPDATE,
-      oldData,
-      newData: updatedPurchaseOrder,
-    });
-
-    return updatedPurchaseOrder;
   }
 
   /**
-   * Soft delete - Xóa mềm đơn đặt hàng
+   * Xóa mềm đơn đặt hàng (soft delete)
    */
   async remove(id: string, req): Promise<PurchaseOrderDocument> {
-    if (!mongoose.isValidObjectId(id)) {
-      throw new BadRequestException('ID không hợp lệ');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingOrder = await this.purchaseOrderModel.findById(id).exec();
+    if (!existingOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng');
+    }
+    
+    // Verify that the purchase order belongs to the retailer in the header
+    if (existingOrder.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng cho cửa hàng này');
+    }
+    
+    if (existingOrder.isDeleted) {
+      throw new BadRequestException('Đơn đặt hàng đã được xóa trước đó');
     }
 
-    const purchaseOrder = await this.purchaseOrderModel.findById(id);
-
-    if (!purchaseOrder) {
-      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
-    }
-
-    if (purchaseOrder.isDeleted) {
-      throw new BadRequestException('Đơn đặt hàng này đã bị xóa');
-    }
-
-    // Kiểm tra quyền truy cập (chỉ admin và owner mới có quyền xóa)
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
 
-    if (!userIsAdmin && !userIsOwner) {
-      throw new ForbiddenException('Bạn không có quyền xóa đơn đặt hàng này');
+    // Chỉ owner và admin có quyền xóa
+    if (!userIsAdmin) {
+      const isOwner = userDetail.ownedRetailer.some(
+        id => id.toString() === retailerId
+      );
+
+      if (!isOwner) {
+        throw new ForbiddenException('Bạn không có quyền xóa đơn đặt hàng này');
+      }
     }
 
-    // Tạo audit log trước khi xóa
-    const oldData = purchaseOrder.toObject();
+    const modifiedBy = user.id;
+    const deletedOrder = await this.purchaseOrderModel
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: true,
+          deletedBy: new mongoose.Types.ObjectId(modifiedBy),
+          deletedAt: new Date(),
+        },
+        { new: true },
+      )
+      .exec();
 
-    // Cập nhật thông tin xóa
-    purchaseOrder.isDeleted = true;
-    purchaseOrder.deletedAt = new Date();
-    purchaseOrder.deletedBy = new mongoose.Types.ObjectId(user.id);
+    if (!deletedOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng sau khi xóa');
+    }
 
-    await purchaseOrder.save();
-
-    // Lưu audit log
+    // Tạo audit log
     await this.auditLogsService.createLog({
-      retailerId: new mongoose.Types.ObjectId(purchaseOrder.retailerId),
-      modifiedBy: new mongoose.Types.ObjectId(user.id),
+      retailerId: new mongoose.Types.ObjectId(deletedOrder.retailerId),
+      modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
-      action: AUDIT_LOG_ACTION_ENUM.DELETE,
-      oldData,
-      newData: purchaseOrder,
+      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
+      oldData: existingOrder,
+      newData: deletedOrder,
     });
 
-    return purchaseOrder;
+    return deletedOrder;
   }
 
   /**
-   * Hard delete - Xóa vĩnh viễn đơn đặt hàng (chỉ admin)
+   * Xóa vĩnh viễn đơn đặt hàng (chỉ admin mới có quyền)
    */
   async hardDelete(id: string, req): Promise<PurchaseOrderDocument> {
-    if (!mongoose.isValidObjectId(id)) {
-      throw new BadRequestException('ID không hợp lệ');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingOrder = await this.purchaseOrderModel.findById(id).exec();
+    if (!existingOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng');
+    }
+    
+    // Verify that the purchase order belongs to the retailer in the header
+    if (existingOrder.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng cho cửa hàng này');
     }
 
-    const purchaseOrder = await this.purchaseOrderModel.findById(id);
-
-    if (!purchaseOrder) {
-      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
-    }
-
-    // Kiểm tra quyền truy cập (chỉ admin mới có quyền xóa vĩnh viễn)
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     
+    // Chỉ admin mới có quyền xóa vĩnh viễn
     if (userDetail.role !== 'admin') {
       throw new ForbiddenException('Chỉ admin mới có quyền xóa vĩnh viễn đơn đặt hàng');
     }
 
-    // Tạo audit log trước khi xóa vĩnh viễn
-    const oldData = purchaseOrder.toObject();
+    const modifiedBy = user.id;
+    const deletedOrder = await this.purchaseOrderModel
+      .findByIdAndDelete(id)
+      .lean()
+      .exec();
 
-    // Xóa vĩnh viễn
-    await this.purchaseOrderModel.findByIdAndDelete(id);
+    if (!deletedOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng');
+    }
 
-    // Lưu audit log
+    // Tạo audit log
     await this.auditLogsService.createLog({
-      retailerId: new mongoose.Types.ObjectId(purchaseOrder.retailerId),
-      modifiedBy: new mongoose.Types.ObjectId(user.id),
+      retailerId: new mongoose.Types.ObjectId(deletedOrder.retailerId),
+      modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
       action: AUDIT_LOG_ACTION_ENUM.HARD_DELETE,
-      oldData,
+      oldData: existingOrder,
       newData: null,
     });
 
-    return purchaseOrder;
+    return deletedOrder as PurchaseOrderDocument;
   }
 
   /**
    * Khôi phục đơn đặt hàng đã xóa
    */
   async restore(id: string, req): Promise<PurchaseOrderDocument> {
-    if (!mongoose.isValidObjectId(id)) {
-      throw new BadRequestException('ID không hợp lệ');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingOrder = await this.purchaseOrderModel.findById(id).exec();
+    if (!existingOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng');
+    }
+    
+    // Verify that the purchase order belongs to the retailer in the header
+    if (existingOrder.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng cho cửa hàng này');
+    }
+    
+    if (!existingOrder.isDeleted) {
+      throw new BadRequestException('Đơn đặt hàng không ở trạng thái đã xóa');
     }
 
-    const purchaseOrder = await this.purchaseOrderModel.findById(id);
-
-    if (!purchaseOrder) {
-      throw new NotFoundException(`Không tìm thấy đơn đặt hàng với ID ${id}`);
-    }
-
-    if (!purchaseOrder.isDeleted) {
-      throw new BadRequestException('Đơn đặt hàng này chưa bị xóa');
-    }
-
-    // Kiểm tra quyền truy cập (chỉ admin và owner mới có quyền khôi phục)
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === purchaseOrder.retailerId.toString()
-    );
 
-    if (!userIsAdmin && !userIsOwner) {
-      throw new ForbiddenException('Bạn không có quyền khôi phục đơn đặt hàng này');
-    }
+    // Chỉ owner và admin có quyền khôi phục
+    if (!userIsAdmin) {
+      const isOwner = userDetail.ownedRetailer.some(
+        id => id.toString() === retailerId
+      );
 
-    // Tạo audit log trước khi khôi phục
-    const oldData = purchaseOrder.toObject();
-
-    // Cập nhật thông tin khôi phục
-    purchaseOrder.isDeleted = false;
-    purchaseOrder.deletedAt = null;
-    purchaseOrder.updatedBy = new mongoose.Types.ObjectId(user.id);
-
-    await purchaseOrder.save();
-
-    // Lưu audit log
-    await this.auditLogsService.createLog({
-      retailerId: new mongoose.Types.ObjectId(purchaseOrder.retailerId),
-      modifiedBy: new mongoose.Types.ObjectId(user.id),
-      module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
-      action: AUDIT_LOG_ACTION_ENUM.RESTORE,
-      oldData,
-      newData: purchaseOrder,
-    });
-
-    return purchaseOrder;
-  }
-
-  // Helper method to fetch and fill goods information
-  private async fillGoodsInfo(items: any[], req): Promise<any[]> {
-    for (const item of items) {
-      if (item.goodId && !item.name) {
-        try {
-          const good = await this.goodService.findOne(item.goodId, req);
-          if (good) {
-            // Chỉ tự động điền tên sản phẩm
-            item.name = good.name;
-            // Không điền price hoặc tính toán total - các giá trị này sẽ được FE gửi lên
-          }
-        } catch (error) {
-          // If good is not found, we don't throw error but just log it
-          console.warn(`Good with ID ${item.goodId} not found or not accessible`);
-        }
+      if (!isOwner) {
+        throw new ForbiddenException('Bạn không có quyền khôi phục đơn đặt hàng này');
       }
     }
-    return items;
+
+    const modifiedBy = user.id;
+    const restoredOrder = await this.purchaseOrderModel
+      .findByIdAndUpdate(
+        id,
+        {
+          isDeleted: false,
+          deletedBy: null,
+          deletedAt: null,
+          lastUpdatedBy: new mongoose.Types.ObjectId(modifiedBy),
+        },
+        { new: true },
+      )
+      .exec();
+
+    if (!restoredOrder) {
+      throw new NotFoundException('Không tìm thấy đơn đặt hàng sau khi khôi phục');
+    }
+
+    // Tạo audit log
+    await this.auditLogsService.createLog({
+      retailerId: new mongoose.Types.ObjectId(restoredOrder.retailerId),
+      modifiedBy: new mongoose.Types.ObjectId(modifiedBy),
+      module: AUDIT_LOG_MODULE_ENUM.PURCHASE_ORDER,
+      action: AUDIT_LOG_ACTION_ENUM.RESTORE,
+      oldData: existingOrder,
+      newData: restoredOrder,
+    });
+
+    return restoredOrder;
+  }
+
+  /**
+   * Hỗ trợ điền thông tin sản phẩm từ ID
+   */
+  private async fillGoodsInfo(items: any[], req): Promise<any[]> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    return Promise.all(
+      items.map(async (item) => {
+        // Nếu có goodId, lấy thông tin từ database
+        if (item.goodId) {
+          try {
+            const good = await this.goodService.findOne(item.goodId, {
+              ...req,
+              headers: {
+                ...req.headers,
+                [RETAILER_ID_HEADER]: retailerId
+              }
+            });
+            
+            // Nếu không cung cấp tên, lấy từ good
+            if (!item.name && good) {
+              item.name = good.name;
+            }
+          
+          } catch (error) {
+            // Nếu không tìm thấy good, bỏ qua, giữ nguyên dữ liệu đầu vào
+            console.log(`Could not find good with ID ${item.goodId}`, error);
+          }
+        }
+        
+        // Tính tổng tiền cho mỗi item nếu chưa có
+        if (item.price !== undefined && item.quantity !== undefined && item.total === undefined) {
+          item.total = item.price * item.quantity;
+        }
+        
+        return item;
+      })
+    );
   }
 } 

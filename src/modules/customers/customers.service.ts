@@ -21,6 +21,7 @@ import {
   AUDIT_LOG_MODULE_ENUM,
 } from '../audit-logs/audit-logs.constant';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class CustomersService {
@@ -35,12 +36,17 @@ export class CustomersService {
     createCustomerDto: CreateCustomerDto,
     req,
   ): Promise<CustomerDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const {
       displayName,
       name,
       phoneNumber = null,
       profileSrc = null,
-      retailerId,
     } = createCustomerDto;
 
     try {
@@ -95,27 +101,29 @@ export class CustomersService {
   }
 
   async findAll(query: CustomerFilterDto, req) {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const currentPage = parseInt(query?.page?.toString()) || 1;
     const pageSize = parseInt(query?.pageSize?.toString()) || 10;
 
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner =
-      query?.retailerId &&
-      userDetail.ownedRetailer.some(
-        (retailerId) => retailerId.toString() === query?.retailerId?.toString(),
-      );
+    const userIsOwner = userDetail.ownedRetailer.some(
+      (id) => id.toString() === retailerId,
+    );
 
     const queryCustomer: FilterQuery<Customer> = {
+      retailerId: new Types.ObjectId(retailerId),
       ...(query?.name && {
         name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
       ...(query?.phoneNumber && {
         phoneNumber: { $regex: query.phoneNumber, $options: 'i' },
-      }),
-      ...(query?.retailerId && {
-        retailerId: new Types.ObjectId(query.retailerId),
       }),
       ...(userIsAdmin || userIsOwner
         ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
@@ -130,19 +138,16 @@ export class CustomersService {
           },
         ],
       }),
-      ...(!userIsAdmin &&
-        !userIsOwner && {
-          $and: [
-            {
-              retailerId: {
-                $in: [...userDetail.ownedRetailer, ...userDetail.modRetailer],
-              },
-            },
-            ...(query?.retailerId
-              ? [{ retailerId: new Types.ObjectId(query.retailerId) }]
-              : []),
-          ],
-        }),
+      ...(!userIsAdmin && !userIsOwner && {
+        $and: [
+          {
+            retailerId: {
+              $in: [...userDetail.ownedRetailer, ...userDetail.modRetailer],
+            }
+          },
+          { retailerId: new Types.ObjectId(retailerId) }
+        ],
+      }),
     };
 
     const totalCount = await this.customerModel.countDocuments(queryCustomer);
@@ -186,25 +191,36 @@ export class CustomersService {
   }
 
   async findOne(id: string, req): Promise<CustomerDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingCustomer = await this.customerModel
       .findById(new Types.ObjectId(id))
       .exec();
+      
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
+    }
+    
+    // Verify that the customer belongs to the retailer in the header
+    if (existingCustomer.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Customer not found for this retailer');
     }
 
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      (retailerId) =>
-        retailerId.toString() === existingCustomer.retailerId.toString(),
+      (id) => id.toString() === retailerId,
     );
 
     const customer = await this.customerModel
       .findById(id)
-      .where(userIsOwner || userIsAdmin ? {} : { isDeleted: false })
-      .select(userIsOwner || userIsAdmin ? '' : '-isDeleted')
+      .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
+      .select((userIsOwner || userIsAdmin) ? '' : '-isDeleted')
       .populate(
         (userIsOwner || userIsAdmin) && {
           path: 'retailerId',
@@ -237,97 +253,99 @@ export class CustomersService {
     updateCustomerDto: UpdateCustomerDto,
     req,
   ): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel
-      .findById(new Types.ObjectId(id))
-      .exec();
-    if (!existingCustomer) {
-      throw new NotFoundException('Customer not found');
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
     }
-
-    if (existingCustomer.isDeleted) {
-      throw new BadRequestException('Customer is deleted');
-    }
-
-    const user = req.user;
-    const userDetail = await this.userService.findById(user.id);
-    const userIsAdmin = userDetail.role === 'admin';
-
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const hasAccess = [
-        ...userDetail.ownedRetailer,
-        ...userDetail.modRetailer,
-      ].some(
-        (retailerId) =>
-          retailerId.toString() === existingCustomer.retailerId.toString(),
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(
-          `Customer with ID ${id} not found or you don't have permission to update`,
-        );
+    
+    try {
+      const existingCustomer = await this.customerModel.findById(id).exec();
+      if (!existingCustomer) {
+        throw new NotFoundException('Customer not found');
       }
-    }
+      
+      // Verify that the customer belongs to the retailer in the header
+      if (existingCustomer.retailerId.toString() !== retailerId) {
+        throw new NotFoundException('Customer not found for this retailer');
+      }
+      
+      if (existingCustomer.isDeleted) {
+        throw new BadRequestException('Customer is deleted');
+      }
 
-    // Kiểm tra tên mới có bị trùng không
-    if (
-      updateCustomerDto.name &&
-      updateCustomerDto.name !== existingCustomer.name
-    ) {
-      const nameExists = await this.customerModel
-        .findOne({
-          name: { $regex: `^${updateCustomerDto.name.trim()}$`, $options: 'i' },
-          retailerId: existingCustomer.retailerId,
-          _id: { $ne: existingCustomer._id },
-          isDeleted: false,
-        })
+      const modifiedBy = req.user.id;
+
+      // Kiểm tra trùng tên
+      if (updateCustomerDto.name) {
+        const nameExists = await this.customerModel
+          .findOne({
+            _id: { $ne: id },
+            name: { $regex: `^${updateCustomerDto.name.trim()}$`, $options: 'i' },
+            retailerId: new Types.ObjectId(retailerId),
+            isDeleted: false,
+          })
+          .exec();
+
+        if (nameExists) {
+          throw new ConflictException('Customer name already exists');
+        }
+      }
+
+      const oldCustomer = { ...existingCustomer.toObject() };
+      
+      const updateData = {
+        ...updateCustomerDto,
+        ...(updateCustomerDto.name && {
+          slug: convertVietnameseToSlug(updateCustomerDto.name),
+        }),
+        lastUpdatedBy: new Types.ObjectId(modifiedBy),
+      };
+
+      const updatedCustomer = await this.customerModel
+        .findByIdAndUpdate(id, updateData, { new: true })
         .exec();
 
-      if (nameExists) {
-        throw new ConflictException('Customer name already exists');
+      if (!updatedCustomer) {
+        throw new NotFoundException('Customer not found');
       }
+
+      // Create audit log
+      await this.auditLogsService.createLog({
+        retailerId: new Types.ObjectId(updatedCustomer.retailerId),
+        modifiedBy: new Types.ObjectId(modifiedBy),
+        module: AUDIT_LOG_MODULE_ENUM.CUSTOMER,
+        action: AUDIT_LOG_ACTION_ENUM.UPDATE,
+        oldData: oldCustomer,
+        newData: updatedCustomer,
+      });
+
+      return updatedCustomer;
+    } catch (error) {
+      if (error instanceof ConflictException || error instanceof NotFoundException || error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new InternalServerErrorException('Failed to update customer');
     }
-
-    const modifiedBy = user.id;
-    const updateData = {
-      ...updateCustomerDto,
-      ...(updateCustomerDto.retailerId && {
-        retailerId: new Types.ObjectId(updateCustomerDto.retailerId),
-      }),
-      ...(updateCustomerDto.name && {
-        slug: convertVietnameseToSlug(updateCustomerDto.name),
-      }),
-      lastUpdatedBy: new Types.ObjectId(modifiedBy),
-    };
-
-    const updatedCustomer = await this.customerModel
-      .findByIdAndUpdate(id, updateData, { new: true })
-      .exec();
-
-    if (!updatedCustomer) {
-      throw new NotFoundException(`Customer with ID ${id} not found`);
-    }
-
-    await this.auditLogsService.createLog({
-      retailerId: new Types.ObjectId(updatedCustomer.retailerId),
-      modifiedBy: new Types.ObjectId(modifiedBy),
-      module: AUDIT_LOG_MODULE_ENUM.CUSTOMER,
-      action: AUDIT_LOG_ACTION_ENUM.UPDATE,
-      oldData: existingCustomer,
-      newData: updatedCustomer,
-    });
-
-    return updatedCustomer;
   }
 
   async remove(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel
-      .findById(new Types.ObjectId(id))
-      .exec();
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingCustomer = await this.customerModel.findById(id).exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-
+    
+    // Verify that the customer belongs to the retailer in the header
+    if (existingCustomer.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Customer not found for this retailer');
+    }
+    
     if (existingCustomer.isDeleted) {
       throw new BadRequestException('Customer is already deleted');
     }
@@ -336,20 +354,18 @@ export class CustomersService {
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
 
-    // Kiểm tra quyền truy cập
+    // Kiểm tra quyền truy cập, chỉ admin và owner được xóa
     if (!userIsAdmin) {
-      const hasAccess = userDetail.ownedRetailer.some(
-        (retailerId) =>
-          retailerId.toString() === existingCustomer.retailerId.toString(),
+      const isOwner = userDetail.ownedRetailer.some(
+        id => id.toString() === retailerId
       );
 
-      if (!hasAccess) {
-        throw new NotFoundException(
-          `Customer with ID ${id} not found or you don't have permission to delete`,
-        );
+      if (!isOwner) {
+        throw new BadRequestException('Only admin or retailer owner can delete customer');
       }
     }
 
+    // Get the user's ID from the JWT payload
     const modifiedBy = user.id;
     const updatedCustomer = await this.customerModel
       .findByIdAndUpdate(
@@ -367,11 +383,12 @@ export class CustomersService {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
 
+    // Create audit log
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(updatedCustomer.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.CUSTOMER,
-      action: AUDIT_LOG_ACTION_ENUM.DELETE,
+      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
       oldData: existingCustomer,
       newData: updatedCustomer,
     });
@@ -380,32 +397,38 @@ export class CustomersService {
   }
 
   async hardDelete(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel
-      .findById(new Types.ObjectId(id))
-      .exec();
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingCustomer = await this.customerModel.findById(id).exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
+    }
+    
+    // Verify that the customer belongs to the retailer in the header
+    if (existingCustomer.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Customer not found for this retailer');
     }
 
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
-    const userIsAdmin = userDetail.role === 'admin';
 
-    // Chỉ admin mới có quyền hard delete
-    if (!userIsAdmin) {
+    // Chỉ admin có quyền hard delete
+    if (userDetail.role !== 'admin') {
       throw new BadRequestException('Only admin can perform hard delete');
     }
 
     const modifiedBy = user.id;
-    const deletedCustomer = await this.customerModel
-      .findByIdAndDelete(id)
-      .lean()
-      .exec();
+    const deletedCustomer = await this.customerModel.findByIdAndDelete(id).lean().exec();
 
     if (!deletedCustomer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
 
+    // Create audit log
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(deletedCustomer.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),
@@ -419,13 +442,22 @@ export class CustomersService {
   }
 
   async restore(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel
-      .findById(new Types.ObjectId(id))
-      .exec();
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingCustomer = await this.customerModel.findById(id).exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-
+    
+    // Verify that the customer belongs to the retailer in the header
+    if (existingCustomer.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Customer not found for this retailer');
+    }
+    
     if (!existingCustomer.isDeleted) {
       throw new BadRequestException('Customer is not deleted');
     }
@@ -434,17 +466,14 @@ export class CustomersService {
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
 
-    // Kiểm tra quyền truy cập
+    // Kiểm tra quyền truy cập, chỉ admin và owner được restore
     if (!userIsAdmin) {
-      const hasAccess = userDetail.ownedRetailer.some(
-        (retailerId) =>
-          retailerId.toString() === existingCustomer.retailerId.toString(),
+      const isOwner = userDetail.ownedRetailer.some(
+        id => id.toString() === retailerId
       );
 
-      if (!hasAccess) {
-        throw new NotFoundException(
-          `Customer with ID ${id} not found or you don't have permission to restore`,
-        );
+      if (!isOwner) {
+        throw new BadRequestException('Only admin or retailer owner can restore customer');
       }
     }
 
@@ -466,6 +495,7 @@ export class CustomersService {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
 
+    // Create audit log
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(restoredCustomer.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),

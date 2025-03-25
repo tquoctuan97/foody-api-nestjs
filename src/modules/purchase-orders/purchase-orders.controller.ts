@@ -12,8 +12,9 @@ import {
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
@@ -26,6 +27,11 @@ import { PurchaseOrderDocument } from './entities/purchase-order.entity';
 
 @ApiTags('Purchase Orders')
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/purchase-orders')
 export class PurchaseOrdersController {

@@ -15,6 +15,7 @@ import { CreateGoodDto, GoodFilterDto, UpdateGoodDto } from './dto/goods.dto';
 import { Good, GoodDocument } from './entities/goods.entity';
 import { UsersService } from '../users/users.service';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class GoodService {
@@ -26,9 +27,15 @@ export class GoodService {
   ) {}
 
   async create(createGoodDto: CreateGoodDto, req): Promise<GoodDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const good = new this.goodModel({
       ...createGoodDto,
-      retailerId: new Types.ObjectId(createGoodDto.retailerId),
+      retailerId: new Types.ObjectId(retailerId),
       createdBy: new Types.ObjectId(req.user.id),
     });
     const modifiedBy = (req as any).user?.id;
@@ -60,13 +67,17 @@ export class GoodService {
     page = 1,
     limit = 10,
     filters: GoodFilterDto = {},
+    retailerId: string,
   ): Promise<{
     total: number;
     page: number;
     limit: number;
     data: Good[];
   }> {
-    const query: any = { isDeleted: false };
+    const query: any = { 
+      isDeleted: false,
+      retailerId: new Types.ObjectId(retailerId)
+    };
 
     // Add filters if provided
     if (filters.name) {
@@ -75,9 +86,7 @@ export class GoodService {
     if (filters.category) {
       query.category = { $regex: filters.category, $options: 'i' };
     }
-    if (filters.retailerId) {
-      query.retailerId = filters.retailerId;
-    }
+    
     const skip = (page - 1) * limit;
     const [goods, total] = await Promise.all([
       this.goodModel
@@ -100,23 +109,26 @@ export class GoodService {
   async findAll(query: GoodFilterDto, req) {
     const currentPage = parseInt(query?.page?.toString()) || 1;
     const pageSize = parseInt(query?.pageSize?.toString()) || 10;
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
 
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === query?.retailerId?.toString()
+      id => id.toString() === retailerId.toString()
     );
 
     const queryRetailer: FilterQuery<Good> = {
+      retailerId: new Types.ObjectId(retailerId),
       ...(query?.name && {
         name: { $regex: `^${query?.name?.trim()}$`, $options: 'i' },
       }),
       ...(query?.category && {
         category: { $regex: query.category, $options: 'i' },
-      }),
-      ...(query?.retailerId && {
-        retailerId: new Types.ObjectId(query.retailerId),
       }),
       ...(userIsAdmin || userIsOwner
         ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
@@ -137,7 +149,7 @@ export class GoodService {
               ],
             }
           },
-          ...(query?.retailerId ? [{ retailerId: new Types.ObjectId(query.retailerId) }] : [])
+          { retailerId: new Types.ObjectId(retailerId) }
         ]
       }),
     };
@@ -186,24 +198,35 @@ export class GoodService {
   }
 
   async findOne(id: string, req): Promise<GoodDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
+    }
+    
+    // Verify that the good belongs to the retailer in the header
+    if (existingGood.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Good not found for this retailer');
     }
     
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === existingGood.retailerId.toString()
+      id => id.toString() === existingGood.retailerId.toString()
     );
 
     const good = await this.goodModel
       .findById(id)
       .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
-      .select((userIsOwner || userIsAdmin) ? '' : '-isDeleted')
+      .select(userIsAdmin || userIsOwner ? '' : '-isDeleted')
       .populate(
-        (userIsOwner || userIsAdmin) && {
+        (userIsAdmin || userIsOwner) && {
           path: 'retailerId',
           select: '_id name',
         },
@@ -234,71 +257,79 @@ export class GoodService {
     updateGoodDto: UpdateGoodDto,
     req,
   ): Promise<GoodDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    try {
+      const existingGood = await this.goodModel.findById(id).exec();
+      if (!existingGood) {
+        throw new NotFoundException('Good not found');
+      }
+      
+      // Verify that the good belongs to the retailer in the header
+      if (existingGood.retailerId.toString() !== retailerId.toString()) {
+        throw new NotFoundException('Good not found for this retailer');
+      }
+
+      const modifiedBy = (req as any).user?.id;
+
+      const oldGood = { ...existingGood.toObject() };
+
+      const updateData = {
+        ...updateGoodDto,
+        lastUpdatedBy: new Types.ObjectId(modifiedBy),
+      };
+
+      const updatedGood = await this.goodModel
+        .findByIdAndUpdate(id, updateData, { new: true })
+        .exec();
+
+      // Create audit log
+      await this.auditLogsService.createLog({
+        retailerId: new Types.ObjectId(updatedGood.retailerId),
+        modifiedBy: new Types.ObjectId(modifiedBy),
+        module: AUDIT_LOG_MODULE_ENUM.GOODS,
+        action: AUDIT_LOG_ACTION_ENUM.UPDATE,
+        oldData: oldGood,
+        newData: updatedGood,
+      });
+
+      return updatedGood;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+
+      console.error('Failed to update good:', error);
+
+      throw new InternalServerErrorException('Failed to update good.');
+    }
+  }
+
+  async remove(id: string, req): Promise<GoodDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
     }
     
-    if (existingGood.isDeleted) {
-      throw new BadRequestException('Good is deleted');
-    }
-
-    const user = (req as any).user;
-    const userDetail = await this.userService.findById(user.id);
-    const userIsAdmin = userDetail.role === 'admin';
-
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === existingGood.retailerId.toString()
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(`Good with ID ${id} not found or you don't have permission to update`);
-      }
-    }
-
-    const modifiedBy = user.id;
-    const updatedGood = await this.goodModel
-      .findByIdAndUpdate(
-        id,
-        {
-          ...updateGoodDto,
-          ...(updateGoodDto.retailerId && {
-            retailerId: new Types.ObjectId(updateGoodDto.retailerId),
-          }),
-          lastUpdatedBy: new Types.ObjectId(modifiedBy),
-        },
-        { new: true },
-      )
-      .exec();
-    
-    if (!updatedGood) {
-      throw new NotFoundException(`Good with ID ${id} not found`);
-    }
-
-    await this.auditLogsService.createLog({
-      retailerId: new Types.ObjectId(updatedGood.retailerId),
-      modifiedBy: new Types.ObjectId(modifiedBy),
-      module: AUDIT_LOG_MODULE_ENUM.GOODS,
-      action: AUDIT_LOG_ACTION_ENUM.UPDATE,
-      oldData: existingGood,
-      newData: updatedGood,
-    });
-    
-    return updatedGood;
-  }
-
-  async remove(id: string, req): Promise<GoodDocument> {
-    const existingGood = await this.goodModel.findById(id).exec();
-    if (!existingGood) {
-      throw new NotFoundException('Good not found');
+    // Verify that the good belongs to the retailer in the header
+    if (existingGood.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Good not found for this retailer');
     }
     
     if (existingGood.isDeleted) {
       throw new BadRequestException('Good is already deleted');
     }
-
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
@@ -306,7 +337,7 @@ export class GoodService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingGood.retailerId.toString()
+        id => id.toString() === existingGood.retailerId.toString()
       );
 
       if (!hasAccess) {
@@ -314,6 +345,7 @@ export class GoodService {
       }
     }
 
+    // Get the user's ID from the JWT payload
     const modifiedBy = user.id;
     const updatedGood = await this.goodModel
       .findByIdAndUpdate(
@@ -344,11 +376,22 @@ export class GoodService {
   }
 
   async hardDelete(id: string, req): Promise<GoodDocument> {
-    const existingGood = await this.goodModel.findById(id).exec();
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
     }
-
+    
+    // Verify that the good belongs to the retailer in the header
+    if (existingGood.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Good not found for this retailer');
+    }
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
@@ -381,15 +424,26 @@ export class GoodService {
   }
 
   async restore(id: string, req): Promise<GoodDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingGood = await this.goodModel.findById(new Types.ObjectId(id)).exec();
     if (!existingGood) {
       throw new NotFoundException('Good not found');
     }
     
+    // Verify that the good belongs to the retailer in the header
+    if (existingGood.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('Good not found for this retailer');
+    }
+    
     if (!existingGood.isDeleted) {
       throw new BadRequestException('Good is not deleted');
     }
-
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
@@ -397,7 +451,7 @@ export class GoodService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingGood.retailerId.toString()
+        id => id.toString() === existingGood.retailerId.toString()
       );
 
       if (!hasAccess) {
@@ -417,7 +471,7 @@ export class GoodService {
         },
         { new: true },
       )
-      .exec();
+      .exec()
     
     if (!restoredGood) {
       throw new NotFoundException(`Good with ID ${id} not found`);

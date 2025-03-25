@@ -14,11 +14,12 @@ import {
 } from '@nestjs/common';
 import { GoodService } from './goods.service';
 
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CreateGoodDto, GoodFilterDto, UpdateGoodDto } from './dto/goods.dto';
 import { GoodDocument } from './entities/goods.entity';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
@@ -32,6 +33,11 @@ interface AuthenticatedRequest extends Request {
 }
 
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/goods')
 export class GoodController {

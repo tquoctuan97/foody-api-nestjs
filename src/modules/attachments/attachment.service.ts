@@ -9,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
 import { AUDIT_LOG_ACTION_ENUM, AUDIT_LOG_MODULE_ENUM } from '../audit-logs/audit-logs.constant';
 import { ConfigService } from '@nestjs/config';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class AttachmentService {
@@ -75,14 +76,23 @@ export class AttachmentService {
   }
 
   async findAll(query: AttachmentFilterDto, req: any): Promise<{ data: AttachmentResponseDto[], total: number }> {
-    const { retailerId, page = 1, limit = 10, isDeleted = false } = query;
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const { page = 1, limit = 10, isDeleted = false } = query;
     const skip = (page - 1) * limit;
 
     const filter: any = { isDeleted };
 
     // Admin có thể xem tất cả file hoặc lọc theo retailerId
-    if (req.user.role !== 'admin' || retailerId) {
-      // Nếu không phải admin hoặc admin có chỉ định retailerId
+    if (req.user.role !== 'admin') {
+      // Nếu không phải admin, chỉ xem được file của retailer trong header
+      filter.retailerId = new Types.ObjectId(retailerId);
+    } else {
+      // Nếu là admin, vẫn lấy retailerId từ header
       filter.retailerId = new Types.ObjectId(retailerId);
     }
 
@@ -168,14 +178,19 @@ export class AttachmentService {
   }
 
   private async getAttachment(id: string, req: any): Promise<AttachmentDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const filter: any = { _id: new Types.ObjectId(id) };
     
     // Nếu không phải admin, chỉ xem được file thuộc retailer mà họ có quyền
     if (req.user.role !== 'admin') {
-      const retailerId = req.query.retailerId || req.body.retailerId;
-      if (!retailerId) {
-        throw new BadRequestException('RetailerId is required');
-      }
+      filter.retailerId = new Types.ObjectId(retailerId);
+    } else {
+      // Nếu là admin, vẫn kiểm tra retailerId để đảm bảo chỉ truy cập vào retailer họ chọn
       filter.retailerId = new Types.ObjectId(retailerId);
     }
 

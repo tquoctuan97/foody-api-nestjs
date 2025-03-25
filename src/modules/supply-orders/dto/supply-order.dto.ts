@@ -17,10 +17,6 @@ import { PaginationParams } from 'src/common/pagination/pagination.model';
 export class CreateSupplyOrderDto {
   @IsMongoId()
   @IsNotEmpty()
-  retailerId: Types.ObjectId;
-
-  @IsMongoId()
-  @IsNotEmpty()
   supplierId: Types.ObjectId;
 
   @ApiProperty({ required: true, type: Date })
@@ -77,10 +73,6 @@ export class CreateSupplyOrderItemDto {
 export class UpdateSupplyOrderDto {
   @IsMongoId()
   @IsOptional()
-  retailerId?: Types.ObjectId;
-
-  @IsMongoId()
-  @IsOptional()
   supplierId?: Types.ObjectId;
 
   @IsDate()
@@ -111,10 +103,6 @@ export class UpdateSupplyOrderDto {
 }
 
 export class SupplyOrderFilterDto extends PaginationParams {
-  @IsMongoId()
-  @IsNotEmpty()
-  retailerId?: Types.ObjectId;
-
   @IsMongoId()
   @IsOptional()
   supplierId?: Types.ObjectId;

@@ -1,10 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { AuditLog } from './entities/audit-log.entity';
 import { AuditLogFilterDto } from './dto/audit-log.dto';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
 import { UsersService } from '../users/users.service';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class AuditLogsService {
@@ -72,36 +73,41 @@ export class AuditLogsService {
   }
 
   async getAuditLogs(query: AuditLogFilterDto, req) {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const currentPage = parseInt(query?.page) || 1;
     const pageSize = parseInt(query?.pageSize) || 10;
 
-    // const { billDate, billDateFrom, billDateTo } =
-    //   this.validateAndParseDates(query);
-
-    // console.log({ req: req.user });
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.some(
+      id => id.toString() === retailerId
+    );
 
-    console.log('getAuditLogs', { userDetail });
+    // Nếu không phải admin hoặc owner, kiểm tra xem user có quyền truy cập hay không
+    if (!userIsAdmin && !userIsOwner) {
+      const hasModerator = userDetail.modRetailer.some(
+        id => id.toString() === retailerId
+      );
+      
+      if (!hasModerator) {
+        throw new BadRequestException('You do not have permission to access these audit logs');
+      }
+    }
 
     const queryAuditLog: FilterQuery<AuditLog> = {
+      retailerId: new Types.ObjectId(retailerId),
       ...(query?.action && { action: { $regex: query.action, $options: 'i' } }),
       ...(query?.module && { collectionName: query.module }),
       ...(query?.modifiedBy && {
         modifiedBy: query.modifiedBy,
       }),
-      ...(query?.retailerId && {
-        retailerId: new Types.ObjectId(query.retailerId),
-      }),
-      // ...(user.role == 'admin' && {
-      //   $or: [
-      //     { retailerId: { $in: userDetail.ownedRetailer } },
-      //     { retailerId: { $in: userDetail.modRetailer } },
-      //   ],
-      // }),
     };
-
-    console.log({ queryAuditLog });
 
     const totalCount = await this.auditLogModel.countDocuments(queryAuditLog);
 
@@ -134,15 +140,44 @@ export class AuditLogsService {
     return this.auditLogModel.create(data);
   }
 
-  async findOne(id: string): Promise<AuditLog> {
+  async findOne(id: string, req): Promise<AuditLog> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const auditLog = await this.auditLogModel
       .findById(id)
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'modifiedBy', select: '_id name email avatar' })
       .exec();
+      
     if (!auditLog) {
       throw new NotFoundException(`AuditLog with ID ${id} not found`);
     }
+    
+    // Verify that the audit log belongs to the retailer in the header
+    if (auditLog.retailerId.toString() !== retailerId) {
+      throw new NotFoundException('Audit log not found for this retailer');
+    }
+    
+    // Kiểm tra quyền truy cập
+    const user = (req as any).user;
+    const userDetail = await this.userService.findById(user.id);
+    const userIsAdmin = userDetail.role === 'admin';
+    
+    if (!userIsAdmin) {
+      const hasAccess = [
+        ...userDetail.ownedRetailer,
+        ...userDetail.modRetailer,
+      ].some(id => id.toString() === retailerId);
+      
+      if (!hasAccess) {
+        throw new BadRequestException('You do not have permission to access this audit log');
+      }
+    }
+    
     return auditLog;
   }
 }

@@ -1,18 +1,12 @@
 import {
   IsBoolean,
-  IsMongoId,
   IsNotEmpty,
   IsOptional,
-  IsString,
+  IsString
 } from 'class-validator';
-import { Types } from 'mongoose';
 import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CreateGoodDto {
-  @IsMongoId()
-  @IsNotEmpty()
-  retailerId: Types.ObjectId;
-
   @IsString()
   @IsNotEmpty()
   name: string;
@@ -31,10 +25,6 @@ export class CreateGoodDto {
 }
 
 export class UpdateGoodDto {
-  @IsMongoId()
-  @IsOptional()
-  retailerId?: Types.ObjectId;
-
   @IsString()
   @IsOptional()
   name?: string;
@@ -57,10 +47,6 @@ export class UpdateGoodDto {
 }
 
 export class GoodFilterDto extends PaginationParams {
-  @IsMongoId()
-  @IsNotEmpty()
-  retailerId?: Types.ObjectId;
-
   @IsString()
   @IsOptional()
   name?: string;

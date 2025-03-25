@@ -24,6 +24,7 @@ import {
 import { UsersService } from '../users/users.service';
 import { FilterQuery } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
 @Injectable()
 export class SupplyOrderService {
@@ -38,10 +39,16 @@ export class SupplyOrderService {
     createSupplyOrderDto: CreateSupplyOrderDto,
     req,
   ): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const supplyOrder = new this.supplyOrderModel({
       ...createSupplyOrderDto,
       createdBy: new Types.ObjectId(req.user.id),
-      retailerId: new Types.ObjectId(createSupplyOrderDto.retailerId),
+      retailerId: new Types.ObjectId(retailerId),
       supplierId: new Types.ObjectId(createSupplyOrderDto.supplierId),
     });
     try {
@@ -64,28 +71,39 @@ export class SupplyOrderService {
   async findAll(query: SupplyOrderFilterDto, req) {
     const currentPage = parseInt(query?.page?.toString()) || 1;
     const pageSize = parseInt(query?.pageSize?.toString()) || 10;
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
 
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
+    const userIsOwner = userDetail.ownedRetailer.some(
+      id => id.toString() === retailerId.toString()
+    );
 
     const queryRetailer: FilterQuery<SupplyOrder> = {
+      retailerId: new Types.ObjectId(retailerId),
       ...(query?.supplierId && { supplierId: query.supplierId }),
-      ...(query?.retailerId && {
-        retailerId: new Types.ObjectId(query.retailerId),
-      }),
       ...(query?.orderDate && { orderDate: query.orderDate }),
-      ...(userIsAdmin
+      ...(userIsAdmin || userIsOwner
         ? query?.isDeleted !== undefined && { isDeleted: query?.isDeleted }
         : { isDeleted: false }),
       ...(query?.isPaidComplete !== undefined && { isPaidComplete: query?.isPaidComplete }),
-      ...(!userIsAdmin && {
-        retailerId: {
-          $in: [
-            ...userDetail.ownedRetailer,
-            ...userDetail.modRetailer,
-          ],
-        },
+      ...(!userIsAdmin && !userIsOwner && {
+        $and: [
+          {
+            retailerId: {
+              $in: [
+                ...userDetail.ownedRetailer,
+                ...userDetail.modRetailer,
+              ],
+            }
+          },
+          { retailerId: new Types.ObjectId(retailerId) }
+        ]
       }),
     };
 
@@ -98,7 +116,7 @@ export class SupplyOrderService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .select(userIsAdmin ? '-createdAt -updatedAt -__v -items' : '-createdAt -updatedAt -__v -items -isDeleted')
+      .select(userIsAdmin || userIsOwner ? '-createdAt -updatedAt -__v -items' : '-createdAt -updatedAt -__v -items -isDeleted')
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'supplierId', select: '_id name' })
       .populate({
@@ -131,29 +149,32 @@ export class SupplyOrderService {
   }
 
   async findOne(id: string, req): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
+    const existingSupplyOrder = await this.supplyOrderModel.findById(id).lean().exec();
+    if (!existingSupplyOrder) {
+      throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
+    }
+    
+    // Verify that the supply order belongs to the retailer in the header
+    if (existingSupplyOrder.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('SupplyOrder not found for this retailer');
+    }
+    
     const user = (req as any).user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-
-    // Kiểm tra quyền truy cập
-    if (!userIsAdmin) {
-      const supplyOrder = await this.supplyOrderModel.findById(id).lean().exec();
-      if (!supplyOrder) {
-        throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
-      }
-
-      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === supplyOrder.retailerId.toString()
-      );
-
-      if (!hasAccess) {
-        throw new NotFoundException(`SupplyOrder with ID ${id} not found or you don't have permission`);
-      }
-    }
+    const userIsOwner = userDetail.ownedRetailer.some(
+      id => id.toString() === retailerId.toString()
+    );
 
     const supplyOrder = await this.supplyOrderModel
       .findById(id)
-      .where(userIsAdmin ? {} : { isDeleted: false })
+      .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'supplierId', select: '_id name' })
       .populate({
@@ -186,9 +207,20 @@ export class SupplyOrderService {
     updateSupplyOrderDto: UpdateSupplyOrderDto,
     req,
   ): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    // Verify that the supply order belongs to the retailer in the header
+    if (existingSupplyOrder.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('SupplyOrder not found for this retailer');
     }
     
     if (existingSupplyOrder.isDeleted) {
@@ -202,7 +234,7 @@ export class SupplyOrderService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+        id => id.toString() === existingSupplyOrder.retailerId.toString()
       );
 
       if (!hasAccess) {
@@ -210,44 +242,49 @@ export class SupplyOrderService {
       }
     }
 
+    const oldSupplyOrder = { ...existingSupplyOrder.toObject() };
     const modifiedBy = user.id;
-    const updateSupplyOrder = await this.supplyOrderModel
-      .findByIdAndUpdate(
-        id,
-        {
-          ...updateSupplyOrderDto,
-          ...(updateSupplyOrderDto.retailerId && {
-            retailerId: new Types.ObjectId(updateSupplyOrderDto.retailerId),
-          }),
-          ...(updateSupplyOrderDto.supplierId && {
-            supplierId: new Types.ObjectId(updateSupplyOrderDto.supplierId),
-          }),
-          lastUpdatedBy: new Types.ObjectId(modifiedBy),
-        },
-        { new: true },
-      )
-      .exec();
     
-    if (!updateSupplyOrder) {
+    const updateData = {
+      ...updateSupplyOrderDto,
+      lastUpdatedBy: new Types.ObjectId(modifiedBy),
+    };
+
+    const updatedSupplyOrder = await this.supplyOrderModel
+      .findByIdAndUpdate(id, updateData, { new: true })
+      .exec();
+
+    if (!updatedSupplyOrder) {
       throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
     }
 
     await this.auditLogsService.createLog({
-      retailerId: new Types.ObjectId(updateSupplyOrder.retailerId),
+      retailerId: new Types.ObjectId(updatedSupplyOrder.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
       action: AUDIT_LOG_ACTION_ENUM.UPDATE,
-      oldData: existingSupplyOrder,
-      newData: updateSupplyOrder,
+      oldData: oldSupplyOrder,
+      newData: updatedSupplyOrder,
     });
 
-    return updateSupplyOrder;
+    return updatedSupplyOrder;
   }
 
   async remove(id: string, req): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    // Verify that the supply order belongs to the retailer in the header
+    if (existingSupplyOrder.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('SupplyOrder not found for this retailer');
     }
     
     if (existingSupplyOrder.isDeleted) {
@@ -261,7 +298,7 @@ export class SupplyOrderService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+        id => id.toString() === existingSupplyOrder.retailerId.toString()
       );
 
       if (!hasAccess) {
@@ -281,27 +318,38 @@ export class SupplyOrderService {
         { new: true },
       )
       .exec();
-    
+
     if (!updatedSupplyOrder) {
-      throw new NotFoundException('SupplyOrder not found');
+      throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
     }
 
     await this.auditLogsService.createLog({
       retailerId: new Types.ObjectId(updatedSupplyOrder.retailerId),
       modifiedBy: new Types.ObjectId(modifiedBy),
       module: AUDIT_LOG_MODULE_ENUM.SUPPLY_ORDER,
-      action: AUDIT_LOG_ACTION_ENUM.DELETE,
+      action: AUDIT_LOG_ACTION_ENUM.ARCHIVE,
       oldData: existingSupplyOrder,
       newData: updatedSupplyOrder,
     });
-    
+
     return updatedSupplyOrder;
   }
 
   async hardDelete(id: string, req): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    // Verify that the supply order belongs to the retailer in the header
+    if (existingSupplyOrder.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('SupplyOrder not found for this retailer');
     }
 
     const user = (req as any).user;
@@ -318,7 +366,7 @@ export class SupplyOrderService {
       .findByIdAndDelete(id)
       .lean()
       .exec();
-    
+
     if (!deletedSupplyOrder) {
       throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
     }
@@ -331,14 +379,25 @@ export class SupplyOrderService {
       oldData: existingSupplyOrder,
       newData: null,
     });
-    
+
     return deletedSupplyOrder as SupplyOrderDocument;
   }
 
   async restore(id: string, req): Promise<SupplyOrderDocument> {
+    const retailerId = req.headers[RETAILER_ID_HEADER];
+    
+    if (!retailerId) {
+      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+    }
+    
     const existingSupplyOrder = await this.supplyOrderModel.findById(id).exec();
     if (!existingSupplyOrder) {
       throw new NotFoundException('SupplyOrder not found');
+    }
+    
+    // Verify that the supply order belongs to the retailer in the header
+    if (existingSupplyOrder.retailerId.toString() !== retailerId.toString()) {
+      throw new NotFoundException('SupplyOrder not found for this retailer');
     }
     
     if (!existingSupplyOrder.isDeleted) {
@@ -352,7 +411,7 @@ export class SupplyOrderService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingSupplyOrder.retailerId.toString()
+        id => id.toString() === existingSupplyOrder.retailerId.toString()
       );
 
       if (!hasAccess) {
@@ -373,7 +432,7 @@ export class SupplyOrderService {
         { new: true },
       )
       .exec();
-    
+
     if (!restoredSupplyOrder) {
       throw new NotFoundException(`SupplyOrder with ID ${id} not found`);
     }
@@ -386,7 +445,7 @@ export class SupplyOrderService {
       oldData: existingSupplyOrder,
       newData: restoredSupplyOrder,
     });
-    
+
     return restoredSupplyOrder;
   }
 }

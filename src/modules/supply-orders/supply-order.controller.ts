@@ -12,7 +12,7 @@ import {
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 
 import { SupplyOrderService } from './supply-order.service';
 import {
@@ -22,12 +22,18 @@ import {
 } from './dto/supply-order.dto';
 import { SupplyOrderDocument } from './entities/supply-order.entity';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
 } from '../retailers/retailer-access.guard';
 
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/supply-orders')
 export class SupplyOrderController {

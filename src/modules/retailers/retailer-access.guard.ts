@@ -6,6 +6,7 @@ import { Types } from 'mongoose';
 
 // Định nghĩa metadata key để sử dụng trong controller
 export const RETAILER_ROLE_KEY = 'retailerRoles';
+export const RETAILER_ID_HEADER = 'x-retailer-id';
 
 // Interface cho metadata roles, có thể mở rộng thêm các quyền khác nếu cần
 export interface RetailerRoleOptions {
@@ -42,9 +43,7 @@ export class RetailerRoleGuard implements CanActivate {
 
     // Lấy retailerId từ nhiều nguồn khác nhau
     const retailerId =
-      request.query.retailerId ||
-      request.params.retailerId ||
-      request.body.retailerId ||
+    request.headers[RETAILER_ID_HEADER] ||
       request.query.id ||
       request.params.id;
 

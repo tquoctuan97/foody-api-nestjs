@@ -34,13 +34,6 @@ export class CreateCustomerDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string | null;
-
-  @ApiProperty({
-    required: true,
-    description: 'Retailer ID',
-  })
-  @IsMongoId()
-  retailerId: string;
 }
 
 export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}
@@ -61,14 +54,6 @@ export class CustomerFilterDto extends PaginationParams {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
-
-  @ApiPropertyOptional({
-    description: 'Retailer ID',
-    type: String,
-  })
-  @IsOptional()
-  @IsMongoId()
-  retailerId?: string;
 
   @ApiPropertyOptional({
     description: 'Search query',

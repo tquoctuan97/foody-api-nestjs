@@ -16,10 +16,11 @@ import {
   Res
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiBody, ApiConsumes, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiBody, ApiConsumes, ApiHeader, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AttachmentService } from './attachment.service';
 import { CreateAttachmentDto, AttachmentFilterDto, AttachmentResponseDto } from './dto/attachment.dto';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
@@ -34,6 +35,11 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
 @ApiTags('Attachments')
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/attachments')
 export class AttachmentController {
@@ -75,15 +81,15 @@ export class AttachmentController {
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
-    @Query('retailerId') retailerId: string,
     @Req() req,
   ): Promise<AttachmentResponseDto> {
     if (!file) {
       throw new BadRequestException('File is required');
     }
 
+    const retailerId = req.headers[RETAILER_ID_HEADER];
     if (!retailerId) {
-      throw new BadRequestException('retailerId is required');
+      throw new BadRequestException('retailerId is required in x-retailer-id header');
     }
 
     return this.attachmentService.uploadFile(

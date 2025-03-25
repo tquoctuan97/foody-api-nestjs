@@ -3,17 +3,11 @@ import { IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateAttachmentDto {
-  @ApiProperty({ description: 'Retailer ID' })
-  @IsNotEmpty()
-  @IsString()
-  retailerId: string;
+  // retailerId đã được xóa, sẽ lấy từ header
 }
 
 export class AttachmentFilterDto {
-  @ApiProperty({ description: 'Retailer ID', required: false })
-  @IsOptional()
-  @IsMongoId()
-  retailerId?: string;
+  // retailerId đã được xóa, sẽ lấy từ header
 
   @ApiProperty({ description: 'Pagination page', required: false })
   @IsOptional()

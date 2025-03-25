@@ -5,9 +5,9 @@ import {
   IsEnum,
   IsMongoId,
   IsNotEmpty,
-  IsNumber,
   IsOptional,
   IsString,
+  IsNumber,
   Min,
   ValidateNested,
   ValidateIf,
@@ -97,15 +97,6 @@ export class CreatePurchaseOrderDto {
   @IsDate()
   @Type(() => Date)
   orderDate: Date;
-
-  @ApiProperty({
-    required: true,
-    description: 'ID của cửa hàng'
-  })
-  @IsNotEmpty()
-  @IsString()
-  @IsMongoId()
-  retailerId: string;
 
   @ApiProperty({
     required: true,

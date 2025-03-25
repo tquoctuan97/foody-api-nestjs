@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseBoolPipe,
   Patch,
@@ -12,7 +13,7 @@ import {
   SetMetadata,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiHeader } from '@nestjs/swagger';
 import {
   CreateSupplierDto,
   SupplierFilterDto,
@@ -21,12 +22,18 @@ import {
 import { SupplierDocument } from './entities/supplier.entity';
 import { SupplierService } from './supplier.service';
 import {
+  RETAILER_ID_HEADER,
   RETAILER_ROLE_KEY,
   RetailerRole,
   RetailerRoleGuard,
 } from '../retailers/retailer-access.guard';
 
 @ApiBearerAuth()
+@ApiHeader({
+  name: RETAILER_ID_HEADER,
+  description: 'ID của retailer',
+  required: true,
+})
 @UseGuards(RetailerRoleGuard)
 @Controller('api/v1/admin/suppliers')
 export class SupplierController {
