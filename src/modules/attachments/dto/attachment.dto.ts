@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsMongoId, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import { IsOptional } from 'class-validator';
 import { Types } from 'mongoose';
 
 export class CreateAttachmentDto {
@@ -34,4 +34,4 @@ export class AttachmentResponseDto {
   createdBy: Types.ObjectId;
   fileUrl: string;
   downloadUrl: string;
-} 
+}

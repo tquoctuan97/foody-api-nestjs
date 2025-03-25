@@ -1,13 +1,23 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Attachment, AttachmentDocument } from './entities/attachment.entity';
-import { AttachmentFilterDto, AttachmentResponseDto } from './dto/attachment.dto';
+import {
+  AttachmentFilterDto,
+  AttachmentResponseDto,
+} from './dto/attachment.dto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { AuditLogsService } from '../audit-logs/audit-logs.service';
-import { AUDIT_LOG_ACTION_ENUM, AUDIT_LOG_MODULE_ENUM } from '../audit-logs/audit-logs.constant';
+import {
+  AUDIT_LOG_ACTION_ENUM,
+  AUDIT_LOG_MODULE_ENUM,
+} from '../audit-logs/audit-logs.constant';
 import { ConfigService } from '@nestjs/config';
 import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
 
@@ -16,13 +26,14 @@ export class AttachmentService {
   private readonly baseUrl: string;
 
   constructor(
-    @InjectModel(Attachment.name) private attachmentModel: Model<AttachmentDocument>,
+    @InjectModel(Attachment.name)
+    private attachmentModel: Model<AttachmentDocument>,
     private readonly auditLogsService: AuditLogsService,
     private readonly configService: ConfigService,
   ) {
     // Đảm bảo thư mục uploads tồn tại
     this.ensureUploadsDirectory();
-    
+
     this.baseUrl = this.configService.get('ATTACHMENT_BASE_URL') || '';
   }
 
@@ -45,7 +56,7 @@ export class AttachmentService {
 
     // Di chuyển file từ thư mục tạm sang thư mục lưu trữ
     fs.writeFileSync(fullPath, fs.readFileSync(file.path));
-    
+
     // Xóa file tạm (nếu cần)
     if (fs.existsSync(file.path)) {
       fs.unlinkSync(file.path);
@@ -75,13 +86,18 @@ export class AttachmentService {
     return this.mapToResponseDto(attachment);
   }
 
-  async findAll(query: AttachmentFilterDto, req: any): Promise<{ data: AttachmentResponseDto[], total: number }> {
+  async findAll(
+    query: AttachmentFilterDto,
+    req: any,
+  ): Promise<{ data: AttachmentResponseDto[]; total: number }> {
     const retailerId = req.headers[RETAILER_ID_HEADER];
-    
+
     if (!retailerId) {
-      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+      throw new BadRequestException(
+        'RetailerId is required in x-retailer-id header',
+      );
     }
-    
+
     const { page = 1, limit = 10, isDeleted = false } = query;
     const skip = (page - 1) * limit;
 
@@ -107,7 +123,7 @@ export class AttachmentService {
     ]);
 
     return {
-      data: attachments.map(attachment => this.mapToResponseDto(attachment)),
+      data: attachments.map((attachment) => this.mapToResponseDto(attachment)),
       total,
     };
   }
@@ -125,12 +141,12 @@ export class AttachmentService {
 
     const attachment = await this.getAttachment(id, req);
     const oldData = { ...attachment.toObject() };
-    
+
     // Soft delete
     attachment.isDeleted = true;
     attachment.deletedAt = new Date();
     attachment.deletedBy = new Types.ObjectId(req.user.id);
-    
+
     await attachment.save();
 
     // Ghi log
@@ -154,13 +170,13 @@ export class AttachmentService {
 
     const attachment = await this.getAttachment(id, req);
     const oldData = { ...attachment.toObject() };
-    
+
     // Xóa file từ hệ thống
     const filePath = path.join(process.cwd(), attachment.path);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }
-    
+
     // Xóa từ database
     await attachment.deleteOne();
 
@@ -177,15 +193,20 @@ export class AttachmentService {
     return this.mapToResponseDto(attachment);
   }
 
-  private async getAttachment(id: string, req: any): Promise<AttachmentDocument> {
+  private async getAttachment(
+    id: string,
+    req: any,
+  ): Promise<AttachmentDocument> {
     const retailerId = req.headers[RETAILER_ID_HEADER];
-    
+
     if (!retailerId) {
-      throw new BadRequestException('RetailerId is required in x-retailer-id header');
+      throw new BadRequestException(
+        'RetailerId is required in x-retailer-id header',
+      );
     }
-    
+
     const filter: any = { _id: new Types.ObjectId(id) };
-    
+
     // Nếu không phải admin, chỉ xem được file thuộc retailer mà họ có quyền
     if (req.user.role !== 'admin') {
       filter.retailerId = new Types.ObjectId(retailerId);
@@ -202,7 +223,9 @@ export class AttachmentService {
     return attachment;
   }
 
-  private mapToResponseDto(attachment: AttachmentDocument): AttachmentResponseDto {
+  private mapToResponseDto(
+    attachment: AttachmentDocument,
+  ): AttachmentResponseDto {
     const id = attachment._id.toString();
     return {
       id,
@@ -214,8 +237,8 @@ export class AttachmentService {
       size: attachment.size,
       createdAt: attachment.createdAt,
       createdBy: attachment.createdBy,
-      fileUrl: `${this.baseUrl}/api/v1/admin/attachments/view/${id}`,
-      downloadUrl: `${this.baseUrl}/api/v1/admin/attachments/file/${id}`,
+      fileUrl: `api/v1/admin/attachments/view/${id}`,
+      downloadUrl: `api/v1/admin/attachments/file/${id}`,
     };
   }
-} 
+}
