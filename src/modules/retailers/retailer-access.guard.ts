@@ -39,12 +39,31 @@ export class RetailerRoleGuard implements CanActivate {
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
+
+    // Lấy retailerId từ nhiều nguồn khác nhau
     const retailerId =
       request.query.retailerId ||
       request.params.retailerId ||
-      request.body.retailerId 
+      request.body.retailerId ||
       request.query.id ||
       request.params.id;
+
+    // Kiểm tra URL để biết nếu đây là endpoint upload
+    const isUploadEndpoint = request.originalUrl.includes(
+      '/attachments/upload',
+    );
+
+    console.log('Request URL:', request.originalUrl);
+    console.log('Request method:', request.method);
+    console.log('Found retailerId:', retailerId);
+
+    // Nếu đây là endpoint upload và không tìm thấy retailerId, cho phép đi qua và để controller xử lý
+    if (isUploadEndpoint && !retailerId) {
+      console.log(
+        'Upload endpoint detected, allowing request to proceed to controller',
+      );
+      return true;
+    }
 
     if (!user) {
       return false;

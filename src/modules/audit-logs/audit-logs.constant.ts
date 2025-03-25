@@ -5,6 +5,8 @@ export enum AUDIT_LOG_ACTION_ENUM {
   HARD_DELETE = 'HARD_DELETE',
   ARCHIVE = 'ARCHIVE',
   RESTORE = 'RESTORE',
+  UPLOAD = 'UPLOAD',
+  
 }
 
 export enum AUDIT_LOG_MODULE_ENUM {
@@ -14,4 +16,5 @@ export enum AUDIT_LOG_MODULE_ENUM {
   PURCHASE_ORDER = 'Purchase Order',
   SUPPLY_ORDER = 'Supply Order',
   GOODS = 'Goods',
+  ATTACHMENT = 'Attachment',
 }

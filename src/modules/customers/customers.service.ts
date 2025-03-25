@@ -8,7 +8,11 @@ import {
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
-import { CreateCustomerDto, CustomerFilterDto, UpdateCustomerDto } from './dto/customer.dto';
+import {
+  CreateCustomerDto,
+  CustomerFilterDto,
+  UpdateCustomerDto,
+} from './dto/customer.dto';
 import { Customer, CustomerDocument } from './entities/customer.entity';
 import { convertVietnameseToSlug } from 'src/utils';
 import { UsersService } from '../users/users.service';
@@ -21,22 +25,34 @@ import { AuditLogsService } from '../audit-logs/audit-logs.service';
 @Injectable()
 export class CustomersService {
   constructor(
-    @InjectModel(Customer.name) private readonly customerModel: Model<CustomerDocument>,
+    @InjectModel(Customer.name)
+    private readonly customerModel: Model<CustomerDocument>,
     private readonly userService: UsersService,
     private readonly auditLogsService: AuditLogsService,
   ) {}
 
-  async create(createCustomerDto: CreateCustomerDto, req): Promise<CustomerDocument> {
-    const { displayName, name, phoneNumber = null, profileSrc = null, retailerId } = createCustomerDto;
+  async create(
+    createCustomerDto: CreateCustomerDto,
+    req,
+  ): Promise<CustomerDocument> {
+    const {
+      displayName,
+      name,
+      phoneNumber = null,
+      profileSrc = null,
+      retailerId,
+    } = createCustomerDto;
 
     try {
       // Kiểm tra trùng tên
-      const existingCustomer = await this.customerModel.findOne({ 
-        name: { $regex: `^${name.trim()}$`, $options: 'i' },
-        retailerId: new Types.ObjectId(retailerId),
-        isDeleted: false
-      }).exec();
-      
+      const existingCustomer = await this.customerModel
+        .findOne({
+          name: { $regex: `^${name.trim()}$`, $options: 'i' },
+          retailerId: new Types.ObjectId(retailerId),
+          isDeleted: false,
+        })
+        .exec();
+
       if (existingCustomer) {
         throw new ConflictException('Customer name already exists');
       }
@@ -67,7 +83,9 @@ export class CustomersService {
       return savedCustomer;
     } catch (error) {
       if (error.code === 11000) {
-        throw new ConflictException('Customer name must be unique for the same retailer.');
+        throw new ConflictException(
+          'Customer name must be unique for the same retailer.',
+        );
       }
       if (error instanceof ConflictException) {
         throw error;
@@ -83,9 +101,11 @@ export class CustomersService {
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
-    const userIsOwner = query?.retailerId && userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === query?.retailerId?.toString()
-    );
+    const userIsOwner =
+      query?.retailerId &&
+      userDetail.ownedRetailer.some(
+        (retailerId) => retailerId.toString() === query?.retailerId?.toString(),
+      );
 
     const queryCustomer: FilterQuery<Customer> = {
       ...(query?.name && {
@@ -102,25 +122,27 @@ export class CustomersService {
         : { isDeleted: false }),
       ...(query?.search && {
         $or: [
-          { name: { $regex: query.search, $options: 'i' } },
-          { displayName: { $regex: query.search, $options: 'i' } },
-          { phoneNumber: { $regex: query.search, $options: 'i' } },
-          { slug: { $regex: convertVietnameseToSlug(query.search), $options: 'i' } },
+          {
+            slug: {
+              $regex: convertVietnameseToSlug(query.search),
+              $options: 'i',
+            },
+          },
         ],
       }),
-      ...(!userIsAdmin && !userIsOwner && {
-        $and: [
-          {
-            retailerId: {
-              $in: [
-                ...userDetail.ownedRetailer,
-                ...userDetail.modRetailer,
-              ],
-            }
-          },
-          ...(query?.retailerId ? [{ retailerId: new Types.ObjectId(query.retailerId) }] : [])
-        ]
-      }),
+      ...(!userIsAdmin &&
+        !userIsOwner && {
+          $and: [
+            {
+              retailerId: {
+                $in: [...userDetail.ownedRetailer, ...userDetail.modRetailer],
+              },
+            },
+            ...(query?.retailerId
+              ? [{ retailerId: new Types.ObjectId(query.retailerId) }]
+              : []),
+          ],
+        }),
     };
 
     const totalCount = await this.customerModel.countDocuments(queryCustomer);
@@ -164,22 +186,25 @@ export class CustomersService {
   }
 
   async findOne(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+    const existingCustomer = await this.customerModel
+      .findById(new Types.ObjectId(id))
+      .exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-    
+
     const user = req.user;
     const userDetail = await this.userService.findById(user.id);
     const userIsAdmin = userDetail.role === 'admin';
     const userIsOwner = userDetail.ownedRetailer.some(
-      retailerId => retailerId.toString() === existingCustomer.retailerId.toString()
+      (retailerId) =>
+        retailerId.toString() === existingCustomer.retailerId.toString(),
     );
 
     const customer = await this.customerModel
       .findById(id)
-      .where((userIsOwner || userIsAdmin) ? {} : { isDeleted: false })
-      .select((userIsOwner || userIsAdmin) ? '' : '-isDeleted')
+      .where(userIsOwner || userIsAdmin ? {} : { isDeleted: false })
+      .select(userIsOwner || userIsAdmin ? '' : '-isDeleted')
       .populate(
         (userIsOwner || userIsAdmin) && {
           path: 'retailerId',
@@ -199,11 +224,11 @@ export class CustomersService {
         select: '_id name email avatar',
       })
       .exec();
-    
+
     if (!customer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
-    
+
     return customer;
   }
 
@@ -212,11 +237,13 @@ export class CustomersService {
     updateCustomerDto: UpdateCustomerDto,
     req,
   ): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+    const existingCustomer = await this.customerModel
+      .findById(new Types.ObjectId(id))
+      .exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-    
+
     if (existingCustomer.isDeleted) {
       throw new BadRequestException('Customer is deleted');
     }
@@ -227,24 +254,35 @@ export class CustomersService {
 
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
-      const hasAccess = [...userDetail.ownedRetailer, ...userDetail.modRetailer].some(
-        retailerId => retailerId.toString() === existingCustomer.retailerId.toString()
+      const hasAccess = [
+        ...userDetail.ownedRetailer,
+        ...userDetail.modRetailer,
+      ].some(
+        (retailerId) =>
+          retailerId.toString() === existingCustomer.retailerId.toString(),
       );
 
       if (!hasAccess) {
-        throw new NotFoundException(`Customer with ID ${id} not found or you don't have permission to update`);
+        throw new NotFoundException(
+          `Customer with ID ${id} not found or you don't have permission to update`,
+        );
       }
     }
 
     // Kiểm tra tên mới có bị trùng không
-    if (updateCustomerDto.name && updateCustomerDto.name !== existingCustomer.name) {
-      const nameExists = await this.customerModel.findOne({
-        name: { $regex: `^${updateCustomerDto.name.trim()}$`, $options: 'i' },
-        retailerId: existingCustomer.retailerId,
-        _id: { $ne: existingCustomer._id },
-        isDeleted: false
-      }).exec();
-      
+    if (
+      updateCustomerDto.name &&
+      updateCustomerDto.name !== existingCustomer.name
+    ) {
+      const nameExists = await this.customerModel
+        .findOne({
+          name: { $regex: `^${updateCustomerDto.name.trim()}$`, $options: 'i' },
+          retailerId: existingCustomer.retailerId,
+          _id: { $ne: existingCustomer._id },
+          isDeleted: false,
+        })
+        .exec();
+
       if (nameExists) {
         throw new ConflictException('Customer name already exists');
       }
@@ -263,13 +301,9 @@ export class CustomersService {
     };
 
     const updatedCustomer = await this.customerModel
-      .findByIdAndUpdate(
-        id,
-        updateData,
-        { new: true },
-      )
+      .findByIdAndUpdate(id, updateData, { new: true })
       .exec();
-    
+
     if (!updatedCustomer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
@@ -282,16 +316,18 @@ export class CustomersService {
       oldData: existingCustomer,
       newData: updatedCustomer,
     });
-    
+
     return updatedCustomer;
   }
 
   async remove(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+    const existingCustomer = await this.customerModel
+      .findById(new Types.ObjectId(id))
+      .exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-    
+
     if (existingCustomer.isDeleted) {
       throw new BadRequestException('Customer is already deleted');
     }
@@ -303,11 +339,14 @@ export class CustomersService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingCustomer.retailerId.toString()
+        (retailerId) =>
+          retailerId.toString() === existingCustomer.retailerId.toString(),
       );
 
       if (!hasAccess) {
-        throw new NotFoundException(`Customer with ID ${id} not found or you don't have permission to delete`);
+        throw new NotFoundException(
+          `Customer with ID ${id} not found or you don't have permission to delete`,
+        );
       }
     }
 
@@ -323,7 +362,7 @@ export class CustomersService {
         { new: true },
       )
       .exec();
-    
+
     if (!updatedCustomer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
@@ -336,12 +375,14 @@ export class CustomersService {
       oldData: existingCustomer,
       newData: updatedCustomer,
     });
-    
+
     return updatedCustomer;
   }
 
   async hardDelete(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+    const existingCustomer = await this.customerModel
+      .findById(new Types.ObjectId(id))
+      .exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
@@ -360,7 +401,7 @@ export class CustomersService {
       .findByIdAndDelete(id)
       .lean()
       .exec();
-    
+
     if (!deletedCustomer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
@@ -373,16 +414,18 @@ export class CustomersService {
       oldData: existingCustomer,
       newData: null,
     });
-    
+
     return deletedCustomer as CustomerDocument;
   }
 
   async restore(id: string, req): Promise<CustomerDocument> {
-    const existingCustomer = await this.customerModel.findById(new Types.ObjectId(id)).exec();
+    const existingCustomer = await this.customerModel
+      .findById(new Types.ObjectId(id))
+      .exec();
     if (!existingCustomer) {
       throw new NotFoundException('Customer not found');
     }
-    
+
     if (!existingCustomer.isDeleted) {
       throw new BadRequestException('Customer is not deleted');
     }
@@ -394,11 +437,14 @@ export class CustomersService {
     // Kiểm tra quyền truy cập
     if (!userIsAdmin) {
       const hasAccess = userDetail.ownedRetailer.some(
-        retailerId => retailerId.toString() === existingCustomer.retailerId.toString()
+        (retailerId) =>
+          retailerId.toString() === existingCustomer.retailerId.toString(),
       );
 
       if (!hasAccess) {
-        throw new NotFoundException(`Customer with ID ${id} not found or you don't have permission to restore`);
+        throw new NotFoundException(
+          `Customer with ID ${id} not found or you don't have permission to restore`,
+        );
       }
     }
 
@@ -415,7 +461,7 @@ export class CustomersService {
         { new: true },
       )
       .exec();
-    
+
     if (!restoredCustomer) {
       throw new NotFoundException(`Customer with ID ${id} not found`);
     }
@@ -428,7 +474,7 @@ export class CustomersService {
       oldData: existingCustomer,
       newData: restoredCustomer,
     });
-    
+
     return restoredCustomer;
   }
 }

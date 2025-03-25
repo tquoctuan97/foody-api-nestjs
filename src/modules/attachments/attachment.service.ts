@@ -1,0 +1,206 @@
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Attachment, AttachmentDocument } from './entities/attachment.entity';
+import { AttachmentFilterDto, AttachmentResponseDto } from './dto/attachment.dto';
+import * as fs from 'fs';
+import * as path from 'path';
+import { v4 as uuidv4 } from 'uuid';
+import { AuditLogsService } from '../audit-logs/audit-logs.service';
+import { AUDIT_LOG_ACTION_ENUM, AUDIT_LOG_MODULE_ENUM } from '../audit-logs/audit-logs.constant';
+import { ConfigService } from '@nestjs/config';
+
+@Injectable()
+export class AttachmentService {
+  private readonly baseUrl: string;
+
+  constructor(
+    @InjectModel(Attachment.name) private attachmentModel: Model<AttachmentDocument>,
+    private readonly auditLogsService: AuditLogsService,
+    private readonly configService: ConfigService,
+  ) {
+    // Đảm bảo thư mục uploads tồn tại
+    this.ensureUploadsDirectory();
+    
+    this.baseUrl = this.configService.get('ATTACHMENT_BASE_URL') || '';
+  }
+
+  private ensureUploadsDirectory() {
+    const uploadDir = path.join(process.cwd(), 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+  }
+
+  async uploadFile(
+    file: Express.Multer.File,
+    retailerId: string,
+    req: any,
+  ): Promise<AttachmentResponseDto> {
+    // Tạo tên file mới để tránh trùng lặp
+    const uniqueFileName = `${uuidv4()}-${file.originalname}`;
+    const uploadPath = path.join('uploads', uniqueFileName);
+    const fullPath = path.join(process.cwd(), uploadPath);
+
+    // Di chuyển file từ thư mục tạm sang thư mục lưu trữ
+    fs.writeFileSync(fullPath, fs.readFileSync(file.path));
+    
+    // Xóa file tạm (nếu cần)
+    if (fs.existsSync(file.path)) {
+      fs.unlinkSync(file.path);
+    }
+
+    // Lưu thông tin file vào database
+    const attachment = await this.attachmentModel.create({
+      retailerId: new Types.ObjectId(retailerId),
+      originalName: file.originalname,
+      fileName: uniqueFileName,
+      path: uploadPath,
+      mimeType: file.mimetype,
+      size: file.size,
+      createdBy: req.user?.id ? new Types.ObjectId(req.user.id) : null,
+    });
+
+    // Ghi log
+    await this.auditLogsService.createLog({
+      retailerId: new Types.ObjectId(retailerId),
+      modifiedBy: req.user?.id ? new Types.ObjectId(req.user.id) : null,
+      module: AUDIT_LOG_MODULE_ENUM.ATTACHMENT,
+      action: AUDIT_LOG_ACTION_ENUM.UPLOAD,
+      oldData: null,
+      newData: attachment,
+    });
+
+    return this.mapToResponseDto(attachment);
+  }
+
+  async findAll(query: AttachmentFilterDto, req: any): Promise<{ data: AttachmentResponseDto[], total: number }> {
+    const { retailerId, page = 1, limit = 10, isDeleted = false } = query;
+    const skip = (page - 1) * limit;
+
+    const filter: any = { isDeleted };
+
+    // Admin có thể xem tất cả file hoặc lọc theo retailerId
+    if (req.user.role !== 'admin' || retailerId) {
+      // Nếu không phải admin hoặc admin có chỉ định retailerId
+      filter.retailerId = new Types.ObjectId(retailerId);
+    }
+
+    const [attachments, total] = await Promise.all([
+      this.attachmentModel
+        .find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .exec(),
+      this.attachmentModel.countDocuments(filter),
+    ]);
+
+    return {
+      data: attachments.map(attachment => this.mapToResponseDto(attachment)),
+      total,
+    };
+  }
+
+  async findOne(id: string, req: any): Promise<AttachmentResponseDto> {
+    const attachment = await this.getAttachment(id, req);
+    return this.mapToResponseDto(attachment);
+  }
+
+  async remove(id: string, req: any): Promise<AttachmentResponseDto> {
+    // Chỉ admin mới có quyền xóa
+    if (req.user.role !== 'admin') {
+      throw new BadRequestException('Only admin can delete attachments');
+    }
+
+    const attachment = await this.getAttachment(id, req);
+    const oldData = { ...attachment.toObject() };
+    
+    // Soft delete
+    attachment.isDeleted = true;
+    attachment.deletedAt = new Date();
+    attachment.deletedBy = new Types.ObjectId(req.user.id);
+    
+    await attachment.save();
+
+    // Ghi log
+    await this.auditLogsService.createLog({
+      retailerId: attachment.retailerId,
+      modifiedBy: new Types.ObjectId(req.user.id),
+      module: AUDIT_LOG_MODULE_ENUM.ATTACHMENT,
+      action: AUDIT_LOG_ACTION_ENUM.DELETE,
+      oldData,
+      newData: attachment.toObject(),
+    });
+
+    return this.mapToResponseDto(attachment);
+  }
+
+  async hardDelete(id: string, req: any): Promise<AttachmentResponseDto> {
+    // Chỉ admin mới có quyền hard delete
+    if (req.user.role !== 'admin') {
+      throw new BadRequestException('Only admin can hard delete attachments');
+    }
+
+    const attachment = await this.getAttachment(id, req);
+    const oldData = { ...attachment.toObject() };
+    
+    // Xóa file từ hệ thống
+    const filePath = path.join(process.cwd(), attachment.path);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    // Xóa từ database
+    await attachment.deleteOne();
+
+    // Ghi log
+    await this.auditLogsService.createLog({
+      retailerId: attachment.retailerId,
+      modifiedBy: new Types.ObjectId(req.user.id),
+      module: AUDIT_LOG_MODULE_ENUM.ATTACHMENT,
+      action: AUDIT_LOG_ACTION_ENUM.HARD_DELETE,
+      oldData,
+      newData: null,
+    });
+
+    return this.mapToResponseDto(attachment);
+  }
+
+  private async getAttachment(id: string, req: any): Promise<AttachmentDocument> {
+    const filter: any = { _id: new Types.ObjectId(id) };
+    
+    // Nếu không phải admin, chỉ xem được file thuộc retailer mà họ có quyền
+    if (req.user.role !== 'admin') {
+      const retailerId = req.query.retailerId || req.body.retailerId;
+      if (!retailerId) {
+        throw new BadRequestException('RetailerId is required');
+      }
+      filter.retailerId = new Types.ObjectId(retailerId);
+    }
+
+    const attachment = await this.attachmentModel.findOne(filter);
+    if (!attachment) {
+      throw new NotFoundException(`Attachment with ID ${id} not found`);
+    }
+
+    return attachment;
+  }
+
+  private mapToResponseDto(attachment: AttachmentDocument): AttachmentResponseDto {
+    const id = attachment._id.toString();
+    return {
+      id,
+      retailerId: attachment.retailerId,
+      originalName: attachment.originalName,
+      fileName: attachment.fileName,
+      path: attachment.path,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      createdAt: attachment.createdAt,
+      createdBy: attachment.createdBy,
+      fileUrl: `${this.baseUrl}/api/v1/admin/attachments/view/${id}`,
+      downloadUrl: `${this.baseUrl}/api/v1/admin/attachments/file/${id}`,
+    };
+  }
+} 

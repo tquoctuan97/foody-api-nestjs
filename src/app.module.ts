@@ -11,6 +11,7 @@ import { SupplierModule } from './modules/suppliers/supplier.module';
 import { GoodsModule } from './modules/goods/goods.module';
 import { SupplyOrderModule } from './modules/supply-orders/supply-order.module';
 import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.module';
+import { AttachmentModule } from './modules/attachments/attachment.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -28,6 +29,7 @@ import { PurchaseOrdersModule } from './modules/purchase-orders/purchase-orders.
     GoodsModule,
     AuditLogsModule,
     PurchaseOrdersModule,
+    AttachmentModule,
   ],
   // providers: [
   //   {
