@@ -237,8 +237,8 @@ export class AttachmentService {
       size: attachment.size,
       createdAt: attachment.createdAt,
       createdBy: attachment.createdBy,
-      fileUrl: `api/v1/admin/attachments/view/${id}`,
-      downloadUrl: `api/v1/admin/attachments/file/${id}`,
+      fileUrl: `${this.baseUrl}/api/v1/admin/attachments/view/${id}`,
+      downloadUrl: `${this.baseUrl}/api/v1/admin/attachments/file/${id}`,
     };
   }
 }
