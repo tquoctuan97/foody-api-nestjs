@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { MongooseModule } from '@nestjs/mongoose';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { AuthModule } from './modules/auth/auth.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { CustomersModule } from './modules/customers/customers.module';
@@ -19,6 +21,15 @@ import { AttachmentModule } from './modules/attachments/attachment.module';
       envFilePath: '.env',
     }),
     MongooseModule.forRoot(process.env.CONNECTIONSTRING),
+    // Cấu hình thư mục tĩnh để phục vụ uploads
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'public'),
+      serveRoot: '/',
+      serveStaticOptions: {
+        index: false, // Không liệt kê thư mục
+        maxAge: 86400000, // Cache 1 ngày 
+      },
+    }),
     AuthModule,
     UsersModule,
     BillsModule,

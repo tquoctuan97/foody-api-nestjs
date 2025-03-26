@@ -38,7 +38,7 @@ export class AttachmentService {
   }
 
   private ensureUploadsDirectory() {
-    const uploadDir = path.join(process.cwd(), 'uploads');
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -49,9 +49,12 @@ export class AttachmentService {
     retailerId: string,
     req: any,
   ): Promise<AttachmentResponseDto> {
-    // Tạo tên file mới để tránh trùng lặp
-    const uniqueFileName = `${uuidv4()}-${file.originalname}`;
-    const uploadPath = path.join('uploads', uniqueFileName);
+    // Lấy extension từ tên file gốc
+    const fileExtension = path.extname(file.originalname);
+    
+    // Tạo tên file mới chỉ chứa UUID và extension, không có tên file gốc
+    const uniqueFileName = `${uuidv4()}${fileExtension}`;
+    const uploadPath = path.join('public', 'uploads', uniqueFileName);
     const fullPath = path.join(process.cwd(), uploadPath);
 
     // Di chuyển file từ thư mục tạm sang thư mục lưu trữ
@@ -227,6 +230,11 @@ export class AttachmentService {
     attachment: AttachmentDocument,
   ): AttachmentResponseDto {
     const id = attachment._id.toString();
+    
+      
+    // URL trực tiếp đến file (không cần xác thực)
+    const directFileUrl = `${this.baseUrl}/uploads/${attachment.fileName}`;
+    
     return {
       id,
       retailerId: attachment.retailerId,
@@ -237,8 +245,7 @@ export class AttachmentService {
       size: attachment.size,
       createdAt: attachment.createdAt,
       createdBy: attachment.createdBy,
-      fileUrl: `${this.baseUrl}/api/v1/admin/attachments/view/${id}`,
-      downloadUrl: `${this.baseUrl}/api/v1/admin/attachments/file/${id}`,
+      fileUrl: directFileUrl,
     };
   }
 }

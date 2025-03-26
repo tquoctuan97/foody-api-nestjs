@@ -32,6 +32,5 @@ export class AttachmentResponseDto {
   size: number;
   createdAt: Date;
   createdBy: Types.ObjectId;
-  fileUrl: string;
-  downloadUrl: string;
+  fileUrl?: string;
 }
