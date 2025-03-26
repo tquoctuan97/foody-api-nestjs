@@ -148,7 +148,7 @@ export class AuditLogsService {
     }
     
     const auditLog = await this.auditLogModel
-      .findById(id)
+      .findById(new Types.ObjectId(id))
       .populate({ path: 'retailerId', select: '_id name' })
       .populate({ path: 'modifiedBy', select: '_id name email avatar' })
       .exec();
@@ -156,9 +156,9 @@ export class AuditLogsService {
     if (!auditLog) {
       throw new NotFoundException(`AuditLog with ID ${id} not found`);
     }
-    
+
     // Verify that the audit log belongs to the retailer in the header
-    if (auditLog.retailerId.toString() !== retailerId) {
+    if (auditLog.retailerId._id.toString() !== retailerId) {
       throw new NotFoundException('Audit log not found for this retailer');
     }
     

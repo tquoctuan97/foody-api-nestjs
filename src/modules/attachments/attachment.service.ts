@@ -20,6 +20,7 @@ import {
 } from '../audit-logs/audit-logs.constant';
 import { ConfigService } from '@nestjs/config';
 import { RETAILER_ID_HEADER } from '../retailers/retailer-access.guard';
+import { PaginationDto } from 'src/common/pagination/pagination.dto';
 
 @Injectable()
 export class AttachmentService {
@@ -78,21 +79,23 @@ export class AttachmentService {
 
     // Ghi log
     await this.auditLogsService.createLog({
-      retailerId: new Types.ObjectId(retailerId),
-      modifiedBy: req.user?.id ? new Types.ObjectId(req.user.id) : null,
+      retailerId: attachment.retailerId,
+      modifiedBy: new Types.ObjectId(req.user.id),
       module: AUDIT_LOG_MODULE_ENUM.ATTACHMENT,
       action: AUDIT_LOG_ACTION_ENUM.UPLOAD,
       oldData: null,
-      newData: attachment,
+      newData: attachment.toObject(),
     });
-
+  
     return this.mapToResponseDto(attachment);
   }
 
   async findAll(
     query: AttachmentFilterDto,
     req: any,
-  ): Promise<{ data: AttachmentResponseDto[]; total: number }> {
+  ): Promise<PaginationDto<AttachmentResponseDto[]>> {
+    const currentPage = parseInt(query?.page?.toString()) || 1;
+    const pageSize = parseInt(query?.limit?.toString()) || 10;
     const retailerId = req.headers[RETAILER_ID_HEADER];
 
     if (!retailerId) {
@@ -101,10 +104,7 @@ export class AttachmentService {
       );
     }
 
-    const { page = 1, limit = 10, isDeleted = false } = query;
-    const skip = (page - 1) * limit;
-
-    const filter: any = { isDeleted };
+    const filter: any = { isDeleted: query?.isDeleted || false };
 
     // Admin có thể xem tất cả file hoặc lọc theo retailerId
     if (req.user.role !== 'admin') {
@@ -115,20 +115,38 @@ export class AttachmentService {
       filter.retailerId = new Types.ObjectId(retailerId);
     }
 
-    const [attachments, total] = await Promise.all([
+    const [attachments, totalCount] = await Promise.all([
       this.attachmentModel
         .find(filter)
         .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
+        .skip((currentPage - 1) * pageSize)
+        .limit(pageSize)
+        .populate({
+          path: 'createdBy',
+          select: '_id name email avatar',
+        })
+        .populate({
+          path: 'lastUpdatedBy',
+          select: '_id name email avatar',
+        })
+        .populate({
+          path: 'deletedBy',
+          select: '_id name email avatar',
+        })
+        .lean<Attachment[]>()
         .exec(),
       this.attachmentModel.countDocuments(filter),
     ]);
 
-    return {
-      data: attachments.map((attachment) => this.mapToResponseDto(attachment)),
-      total,
-    };
+    const data = attachments.map((attachment) => this.mapToResponseDto(attachment));
+
+    return new PaginationDto<AttachmentResponseDto[]>(data, {
+      pageSize: pageSize,
+      currentPage: currentPage,
+      totalPages: Math.ceil(totalCount / pageSize),
+      totalCount: totalCount,
+      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
+    });
   }
 
   async findOne(id: string, req: any): Promise<AttachmentResponseDto> {
