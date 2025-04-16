@@ -59,9 +59,10 @@ export class PurchaseOrder extends Document {
   @Prop({ required: true, type: [PurchaseOrderItem] })
   items: PurchaseOrderItem[];
 
-  @Prop({ 
+  @Prop({
     required: true,
-    description: 'Tổng tiền trước khi áp dụng các khoản điều chỉnh (được tính bằng tổng của các items)'
+    description:
+      'Tổng tiền trước khi áp dụng các khoản điều chỉnh (được tính bằng tổng của các items)',
   })
   subtotal: number;
 
@@ -71,10 +72,10 @@ export class PurchaseOrder extends Document {
   @Prop({ required: true })
   total: number;
 
-  @Prop({ 
-    required: true, 
-    enum: PurchaseOrderStatus, 
-    default: PurchaseOrderStatus.DRAFT 
+  @Prop({
+    required: true,
+    enum: PurchaseOrderStatus,
+    default: PurchaseOrderStatus.DRAFT,
   })
   status: PurchaseOrderStatus;
 
@@ -88,7 +89,7 @@ export class PurchaseOrder extends Document {
   updatedBy: Types.ObjectId;
 
   @Prop({ type: Types.ObjectId, ref: User.name, default: null })
-  deletedBy: Types.ObjectId;
+  lastUpdatedBy: Types.ObjectId;
 
   @Prop({ default: false })
   isDeleted: boolean;
@@ -97,4 +98,4 @@ export class PurchaseOrder extends Document {
   deletedAt: Date;
 }
 
-export const PurchaseOrderSchema = SchemaFactory.createForClass(PurchaseOrder); 
+export const PurchaseOrderSchema = SchemaFactory.createForClass(PurchaseOrder);
