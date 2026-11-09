@@ -1,7 +1,20 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { FilterQuery, Model } from 'mongoose';
+import {
+  auditUserPopulateOptions,
+  populateAuditUsers,
+  setCreatedBy,
+  setUpdatedBy,
+  softDeleteAudit,
+} from 'src/common/audit/audit-user';
+import {
+  buildPaginatedResult,
+  parsePagination,
+  softDeleteFilter,
+} from 'src/common/pagination/paginate';
 import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { UserRequest } from '../auth/models/auth.model';
 import { hashPassword } from '../auth/utils/hashPassword';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -14,54 +27,60 @@ export class UsersService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
   ) {}
 
-  async findAll(query?: UserParams): Promise<PaginationDto<User[]>> {
-    // return this.userModel.find().exec();
-    // sort from value of sort query
-    // if sort is not provided, sort by createdAt in descending order
-    // + for ascending, - for descending
-    const currentPage = parseInt(query?.page) || 1;
-    const pageSize = parseInt(query?.pageSize) || 10;
+  async getAll(query?: UserParams): Promise<PaginationDto<User[]>> {
+    const { currentPage, pageSize } = parsePagination(query);
 
-    const queryUser = {
+    const queryUser: FilterQuery<User> = {
       name: new RegExp(query?.search || '', 'i'),
       status: new RegExp(query?.status || '', 'i'),
+      ...softDeleteFilter(query?.isDeleted),
     };
 
     const totalCount = await this.userModel.countDocuments(queryUser);
 
     const data = await this.userModel
       .find(queryUser)
+      .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .sort(query?.sort || '-createdAt')
       .select('-password')
+      .populate(auditUserPopulateOptions())
       .lean<User[]>()
       .exec();
 
-    const response = new PaginationDto<User[]>(data, {
-      pageSize: pageSize,
-      currentPage: currentPage,
-      // count total number of pages
-      totalPages: Math.ceil(totalCount / pageSize),
-      // count total number of stores in database
-      totalCount: totalCount,
-      // check if there is next page
-      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
-    });
+    return buildPaginatedResult(data, totalCount, currentPage, pageSize);
+  }
 
-    return response;
+  /** @deprecated use getAll */
+  async findAll(query?: UserParams) {
+    return this.getAll(query);
+  }
+
+  async getOne(id: string): Promise<Partial<User>> {
+    const user = await this.userModel
+      .findById(id)
+      .select('-password')
+      .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User ${id} is not found`);
+    }
+
+    return populateAuditUsers(user);
   }
 
   async findById(id: string): Promise<Partial<User>> {
-    return await this.userModel.findById(id).select('-password').exec();
+    return this.getOne(id);
   }
 
   async findByEmail(email: string): Promise<User> {
-    return this.userModel.findOne({ email }).exec();
+    return this.userModel.findOne({ email, deletedAt: null }).exec();
   }
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
-    const isExist = await this.findByEmail(createUserDto.email);
+  async create(actor: UserRequest, createUserDto: CreateUserDto): Promise<User> {
+    const isExist = await this.userModel
+      .findOne({ email: createUserDto.email })
+      .exec();
 
     if (isExist) {
       throw new Error('Email is already exists');
@@ -72,23 +91,59 @@ export class UsersService {
     const result = await this.userModel.create({
       ...createUserDto,
       password: hashedPassword,
+      ...setCreatedBy(actor.id),
     });
 
-    return result;
+    return populateAuditUsers(result);
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(
+    actor: UserRequest,
+    id: string,
+    updateUserDto: UpdateUserDto,
+  ): Promise<User> {
     const hashedPassword = await hashPassword(updateUserDto.password);
 
-    return this.userModel
-      .findByIdAndUpdate(id, {
-        ...updateUserDto,
-        password: hashedPassword,
-      })
+    const user = await this.userModel
+      .findByIdAndUpdate(
+        id,
+        {
+          ...updateUserDto,
+          password: hashedPassword,
+          ...setUpdatedBy(actor.id),
+        },
+        { new: true },
+      )
+      .select('-password')
       .exec();
+
+    if (!user) {
+      throw new NotFoundException(`User ${id} is not found`);
+    }
+
+    return populateAuditUsers(user);
   }
 
-  async remove(id: string) {
-    return this.userModel.findByIdAndDelete(id);
+  async delete(actor: UserRequest, id: string) {
+    const user = await this.userModel.findById(id).select('-password').exec();
+
+    if (!user) {
+      throw new NotFoundException(`User ${id} is not found`);
+    }
+
+    await user.set(softDeleteAudit(actor.id)).save();
+
+    return user.populate({
+      path: 'deletedBy',
+      transform: (u: { _id: unknown; name: string }) => ({
+        _id: u._id,
+        name: u.name,
+      }),
+    });
+  }
+
+  /** @deprecated use delete */
+  async remove(actor: UserRequest, id: string) {
+    return this.delete(actor, id);
   }
 }

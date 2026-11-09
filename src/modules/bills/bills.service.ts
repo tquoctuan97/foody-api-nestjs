@@ -1,19 +1,28 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { FilterQuery, Model, Types } from 'mongoose';
-import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import {
+  assertNotSoftDeleted,
+  assertOwnerOrAdmin,
+  setCreatedBy,
+  setUpdatedBy,
+  softDeleteAudit,
+} from 'src/common/audit/audit-user';
+import {
+  buildPaginatedResult,
+  parsePagination,
+  softDeleteFilter,
+} from 'src/common/pagination/paginate';
 import { UserRequest } from '../auth/models/auth.model';
-import { Role } from '../users/models/user.model';
 import { CreateBillDto } from './dto/create-bill.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
 import { BillParams } from './models/bill.model';
-import { User } from '../users/entities/user.entity';
+import { billDetailPopulateOptions } from './bill-populate';
 
 @Injectable()
 export class BillsService {
@@ -22,21 +31,21 @@ export class BillsService {
   ) {}
 
   private validateAndParseDates(query: BillParams): {
-    billDate?: string;
-    billDateFrom?: string;
-    billDateTo?: string;
+    billDate?: Date;
+    billDateFrom?: Date;
+    billDateTo?: Date;
   } {
-    const dates: Pick<BillParams, 'billDate' | 'billDateFrom' | 'billDateTo'> =
-      ['billDate', 'billDateFrom', 'billDateTo'].reduce((acc, key) => {
-        if (query[key]) {
-          const date = new Date(query[key]);
-          if (isNaN(date.getTime())) {
-            throw new BadRequestException(`${key} must be a valid date`);
-          }
-          acc[key] = date;
+    const dates: { billDate?: Date; billDateFrom?: Date; billDateTo?: Date } =
+      {};
+    for (const key of ['billDate', 'billDateFrom', 'billDateTo'] as const) {
+      if (query[key]) {
+        const date = new Date(query[key]);
+        if (isNaN(date.getTime())) {
+          throw new BadRequestException(`${key} must be a valid date`);
         }
-        return acc;
-      }, {});
+        dates[key] = date;
+      }
+    }
 
     if (
       dates.billDateFrom &&
@@ -58,8 +67,7 @@ export class BillsService {
   }
 
   async getAll(query: BillParams) {
-    const currentPage = parseInt(query?.page) || 1;
-    const pageSize = parseInt(query?.pageSize) || 10;
+    const { currentPage, pageSize } = parsePagination(query);
 
     const { billDate, billDateFrom, billDateTo } =
       this.validateAndParseDates(query);
@@ -70,13 +78,12 @@ export class BillsService {
         customerId: new Types.ObjectId(query.customerId),
       }),
       ...(billDate && { billDate }),
-      ...(billDateFrom && { billDate: { $gte: billDateFrom } }),
-      ...(billDateTo && { billDate: { $lte: billDateTo } }),
       ...(billDateFrom &&
         billDateTo && { billDate: { $gte: billDateFrom, $lte: billDateTo } }),
-      ...(query?.isDeleted
-        ? { deletedAt: { $ne: null } }
-        : { deletedAt: null }),
+      ...(billDateFrom &&
+        !billDateTo && { billDate: { $gte: billDateFrom } }),
+      ...(billDateTo && !billDateFrom && { billDate: { $lte: billDateTo } }),
+      ...softDeleteFilter(query?.isDeleted),
     };
 
     const totalCount = await this.billModel.countDocuments(queryBill);
@@ -86,39 +93,11 @@ export class BillsService {
       .sort(query?.sort || '-createdAt')
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
-      .populate([
-        {
-          path: 'customerId',
-          transform: (customer) => ({
-            _id: customer._id,
-            name: customer.name,
-            displayName: customer.displayName,
-            phoneNumber: customer.phoneNumber,
-          }),
-        },
-        ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
-          path,
-          transform: (user: User) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        })),
-      ])
+      .populate(billDetailPopulateOptions())
       .lean<Bill[]>()
       .exec();
 
-    const response = new PaginationDto<Bill[]>(data, {
-      pageSize: pageSize,
-      currentPage: currentPage,
-      // count total number of pages
-      totalPages: Math.ceil(totalCount / pageSize),
-      // count total number of stores in database
-      totalCount: totalCount,
-      // check if there is next page
-      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
-    });
-
-    return response;
+    return buildPaginatedResult(data, totalCount, currentPage, pageSize);
   }
 
   async getOne(id: string) {
@@ -128,38 +107,7 @@ export class BillsService {
       throw new NotFoundException(`Bill ${id} is not found`);
     }
 
-    return bill.populate([
-      {
-        path: 'customerId',
-        transform: (customer) => ({
-          _id: customer._id,
-          name: customer.name,
-          displayName: customer.displayName,
-          phoneNumber: customer.phoneNumber,
-        }),
-      },
-      {
-        path: 'createdBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'updatedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'deletedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-    ]);
+    return bill.populate(billDetailPopulateOptions());
   }
 
   async create(user: UserRequest, createBillDto: CreateBillDto) {
@@ -185,43 +133,23 @@ export class BillsService {
       prePay,
       sum,
       adjustmentList,
-      createdBy: new Types.ObjectId(user.id),
+      ...setCreatedBy(user.id),
     });
 
     await newBill.save();
 
-    return newBill.populate([
-      {
-        path: 'customerId',
-        transform: (customer) => ({
-          _id: customer._id,
-          name: customer.name,
-          displayName: customer.displayName,
-          phoneNumber: customer.phoneNumber,
-        }),
-      },
-      ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
-        path,
-        transform: (user: User) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      })),
-    ]);
+    return newBill.populate(billDetailPopulateOptions());
   }
 
   async update(user: UserRequest, id: string, updateBillDto: UpdateBillDto) {
-    const bill = await this.getOne(id);
+    const bill = await this.billModel.findById(id).exec();
 
-    if (user.role !== Role.ADMIN && bill.createdBy.toString() !== user.id) {
-      throw new ForbiddenException(
-        'You do not have permission to update this bill',
-      );
+    if (!bill) {
+      throw new NotFoundException(`Bill ${id} is not found`);
     }
 
-    if (bill.deletedAt) {
-      throw new ForbiddenException("Can't update deleted bill");
-    }
+    assertOwnerOrAdmin(user, bill.createdBy, 'update this bill');
+    assertNotSoftDeleted(bill.deletedAt, 'bill');
 
     await bill
       .set({
@@ -229,67 +157,38 @@ export class BillsService {
         ...(updateBillDto.customerId && {
           customerId: new Types.ObjectId(updateBillDto.customerId),
         }),
-        updatedBy: new Types.ObjectId(user.id),
+        ...setUpdatedBy(user.id),
       })
       .save();
 
-    return bill.populate([
-      {
-        path: 'customerId',
-        transform: (customer) => ({
-          _id: customer._id,
-          name: customer.name,
-          displayName: customer.displayName,
-          phoneNumber: customer.phoneNumber,
-        }),
-      },
-      {
-        path: 'updatedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-    ]);
+    return bill.populate(billDetailPopulateOptions());
   }
 
   async delete(user: UserRequest, id: string) {
-    const bill = await this.getOne(id);
+    const bill = await this.billModel.findById(id).exec();
 
-    if (user.role !== Role.ADMIN && bill.createdBy.toString() !== user.id) {
-      throw new ForbiddenException(
-        'You do not have permission to delete this bill',
-      );
+    if (!bill) {
+      throw new NotFoundException(`Bill ${id} is not found`);
     }
 
-    await bill
-      .set({
-        deletedAt: new Date().toISOString(),
-        deletedBy: new Types.ObjectId(user.id),
-      })
-      .save();
+    assertOwnerOrAdmin(user, bill.createdBy, 'delete this bill');
 
-    return bill.populate({
-      path: 'deletedBy',
-      transform: (user) => ({
-        _id: user._id,
-        name: user.name,
-      }),
-    });
+    await bill.set(softDeleteAudit(user.id)).save();
+
+    return bill.populate(billDetailPopulateOptions());
   }
 
-  async getLatestBill(customerId: string): Promise<Bill | { message: string }> {
+  async getLatestBill(customerId: string): Promise<Bill | null> {
     const latestBill = await this.billModel
-      .find({
+      .findOne({
         customerId: new Types.ObjectId(customerId),
         deletedAt: null,
       })
       .sort('-createdAt')
-      .limit(1)
-      .lean() // Use lean for better performance if we don't need a full Mongoose document
+      .populate(billDetailPopulateOptions())
       .exec();
 
-    return latestBill[0] || null;
+    return latestBill ?? null;
   }
 
   async getBillsByRange(
@@ -299,15 +198,16 @@ export class BillsService {
     customerName?: string,
     customerId?: string,
     isDeleted?: boolean,
-  ): Promise<any[]> {
-    const matchStage: any = {
+  ): Promise<unknown[]> {
+    const matchStage: FilterQuery<Bill> = {
       billDate: { $gte: new Date(from), $lte: new Date(to) },
-      ...(isDeleted ? { deletedAt: { $ne: null } } : { deletedAt: null }),
-      ...(!!customerId && { customerId: new Types.ObjectId(customerId) }),
-      ...(!!customerName && {
-        customerName: new RegExp(customerName || '', 'i'),
+      ...softDeleteFilter(isDeleted),
+      ...(customerId && { customerId: new Types.ObjectId(customerId) }),
+      ...(customerName && {
+        customerName: new RegExp(customerName, 'i'),
       }),
     };
+
     if (groupBy === 'customer') {
       return this.billModel
         .aggregate([

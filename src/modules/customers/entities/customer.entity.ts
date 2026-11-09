@@ -36,6 +36,12 @@ export class Customer extends Document {
   @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
   @Prop({ required: false, default: null })
   deletedAt: Date | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  createdAt?: Date;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  updatedAt?: Date;
 }
 
 export const CustomerSchema = SchemaFactory.createForClass(Customer);

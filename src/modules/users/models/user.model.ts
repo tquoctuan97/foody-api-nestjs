@@ -17,4 +17,10 @@ export class UserParams extends PaginationParams {
     description: 'Filter by account status',
   })
   status?: UserStatus;
+
+  @ApiPropertyOptional({
+    type: Boolean,
+    description: 'When true, list soft-deleted users only',
+  })
+  isDeleted?: boolean;
 }

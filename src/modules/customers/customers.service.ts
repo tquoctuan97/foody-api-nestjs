@@ -1,14 +1,25 @@
 import {
   BadRequestException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
-import { FilterQuery, Model } from 'mongoose';
-import { PaginationDto } from 'src/common/pagination/pagination.dto';
+import { FilterQuery, Model, Types } from 'mongoose';
+import {
+  assertNotSoftDeleted,
+  assertOwnerOrAdmin,
+  auditUserPopulateOptions,
+  populateAuditUsers,
+  setCreatedBy,
+  setUpdatedBy,
+  softDeleteAudit,
+} from 'src/common/audit/audit-user';
+import {
+  buildPaginatedResult,
+  parsePagination,
+  softDeleteFilter,
+} from 'src/common/pagination/paginate';
 import { UserRequest } from '../auth/models/auth.model';
-import { Role } from '../users/models/user.model';
 import { CreateCustomerDto } from './dto/create-customer.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { Customer } from './entities/customer.entity';
@@ -22,14 +33,11 @@ export class CustomersService {
   ) {}
 
   async getAll(query: CustomerParams) {
-    const currentPage = parseInt(query?.page) || 1;
-    const pageSize = parseInt(query?.pageSize) || 10;
+    const { currentPage, pageSize } = parsePagination(query);
 
     const queryCustomer: FilterQuery<Customer> = {
       slug: new RegExp(convertVietnameseToSlug(query?.search) || '', 'i'),
-      ...(query?.isDeleted
-        ? { deletedAt: { $ne: null } }
-        : { deletedAt: null }),
+      ...softDeleteFilter(query?.isDeleted),
     };
 
     const totalCount = await this.customerModel.countDocuments(queryCustomer);
@@ -40,83 +48,27 @@ export class CustomersService {
       .skip((currentPage - 1) * pageSize)
       .limit(pageSize)
       .select('-slug')
-      .populate([
-        {
-          path: 'createdBy',
-          transform: (user) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        },
-        {
-          path: 'updatedBy',
-          transform: (user) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        },
-        {
-          path: 'deletedBy',
-          transform: (user) => ({
-            _id: user._id,
-            name: user.name,
-          }),
-        },
-      ])
+      .populate(auditUserPopulateOptions())
       .lean<Customer[]>()
       .exec();
 
-    const response = new PaginationDto<Customer[]>(data, {
-      pageSize: pageSize,
-      currentPage: currentPage,
-      // count total number of pages
-      totalPages: Math.ceil(totalCount / pageSize),
-      // count total number of stores in database
-      totalCount: totalCount,
-      // check if there is next page
-      hasNextPage: currentPage < Math.ceil(totalCount / pageSize),
-    });
-
-    return response;
+    return buildPaginatedResult(data, totalCount, currentPage, pageSize);
   }
 
   async getOne(id: string) {
-    const customer = await this.customerModel
-      .findById(id)
-      .select('-slug')
-      .exec();
+    const customer = await this.customerModel.findById(id).select('-slug').exec();
 
     if (!customer) {
       throw new NotFoundException(`Customer ${id} is not found`);
     }
 
-    return customer.populate([
-      {
-        path: 'createdBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'updatedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'deletedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-    ]);
+    return populateAuditUsers(customer);
   }
 
   async checkCustomerNameExist(name: string) {
-    const customer = await this.customerModel.findOne({ name }).exec();
+    const customer = await this.customerModel
+      .findOne({ name, deletedAt: null })
+      .exec();
     if (customer) {
       throw new BadRequestException('Customer name already exists');
     }
@@ -132,34 +84,12 @@ export class CustomersService {
       name,
       phoneNumber,
       slug: convertVietnameseToSlug(name),
-      createdBy: user.id,
+      ...setCreatedBy(user.id),
     });
 
     await newCustomer.save();
 
-    return newCustomer.populate([
-      {
-        path: 'createdBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'updatedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-      {
-        path: 'deletedBy',
-        transform: (user) => ({
-          _id: user._id,
-          name: user.name,
-        }),
-      },
-    ]);
+    return populateAuditUsers(newCustomer);
   }
 
   async update(
@@ -167,62 +97,51 @@ export class CustomersService {
     id: string,
     updateCustomerDto: UpdateCustomerDto,
   ) {
-    const customer = await this.getOne(id);
+    const customer = await this.customerModel.findById(id).select('-slug').exec();
 
-    if (user.role !== Role.ADMIN && customer.createdBy.toString() !== user.id) {
-      throw new ForbiddenException(
-        'You do not have permission to update this customer',
-      );
+    if (!customer) {
+      throw new NotFoundException(`Customer ${id} is not found`);
     }
 
-    if (customer.deletedAt) {
-      throw new ForbiddenException("Can't update deleted customer");
-    }
+    assertOwnerOrAdmin(user, customer.createdBy, 'update this customer');
+    assertNotSoftDeleted(customer.deletedAt, 'customer');
 
-    if (customer.name !== updateCustomerDto.name.trim()) {
+    if (
+      updateCustomerDto.name &&
+      customer.name !== updateCustomerDto.name.trim()
+    ) {
       await this.checkCustomerNameExist(updateCustomerDto.name);
     }
 
     await customer
       .set({
         ...updateCustomerDto,
-        updatedBy: user.id,
+        ...setUpdatedBy(user.id),
         ...(updateCustomerDto.name && {
           slug: convertVietnameseToSlug(updateCustomerDto.name),
         }),
       })
       .save();
 
-    return customer.populate({
-      path: 'updatedBy',
-      transform: (user) => ({
-        _id: user._id,
-        name: user.name,
-      }),
-    });
+    return customer.populate(auditUserPopulateOptions());
   }
 
   async delete(user: UserRequest, id: string) {
-    const customer = await this.getOne(id);
+    const customer = await this.customerModel.findById(id).select('-slug').exec();
 
-    if (user.role !== Role.ADMIN && customer.createdBy.toString() !== user.id) {
-      throw new ForbiddenException(
-        'You do not have permission to delete this customer',
-      );
+    if (!customer) {
+      throw new NotFoundException(`Customer ${id} is not found`);
     }
 
-    await customer
-      .set({
-        deletedAt: new Date().toISOString(),
-        deletedBy: user.id,
-      })
-      .save();
+    assertOwnerOrAdmin(user, customer.createdBy, 'delete this customer');
+
+    await customer.set(softDeleteAudit(user.id)).save();
 
     return customer.populate({
       path: 'deletedBy',
-      transform: (user) => ({
-        _id: user._id,
-        name: user.name,
+      transform: (u: { _id: Types.ObjectId; name: string }) => ({
+        _id: u._id,
+        name: u.name,
       }),
     });
   }

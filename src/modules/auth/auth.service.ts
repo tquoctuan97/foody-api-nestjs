@@ -6,6 +6,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { UsersService } from '../users/users.service';
 import { ChangePasswordDto } from './dto/sign-in.dto';
+import { Role } from '../users/models/user.model';
 import { comparePassword } from './utils/hashPassword';
 
 @Injectable()
@@ -48,9 +49,11 @@ export class AuthService {
       throw new BadRequestException('Confirm password is incorrect');
     }
 
-    return await this.usersService.update(user.id, {
-      password: changePasswordDto.confirmPassword,
-    });
+    return await this.usersService.update(
+      { id: user.id, role: user.role as Role },
+      user.id,
+      { password: changePasswordDto.confirmPassword },
+    );
   }
 
   async getProfile(id: string) {

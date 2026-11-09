@@ -1,6 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { Document } from 'mongoose';
-import { ApiHideProperty, ApiProperty } from '@nestjs/swagger';
+import { ApiHideProperty, ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Document, Types } from 'mongoose';
 import { Role, UserStatus } from '../models/user.model';
 
 @Schema({ timestamps: true, versionKey: false })
@@ -9,29 +9,47 @@ export class User extends Document {
   @Prop({ required: true, unique: true })
   email: string;
 
-  @ApiProperty()
+  @ApiHideProperty()
   @Prop({ required: true })
   password: string;
 
-  // Role
-
-  @ApiProperty()
+  @ApiProperty({ enum: Role, default: Role.USER })
   @Prop({ enum: Object.values(Role), default: Role.USER })
   role: string;
 
-  @ApiProperty()
+  @ApiProperty({ enum: UserStatus, default: UserStatus.ACTIVE })
   @Prop({ enum: Object.values(UserStatus), default: UserStatus.ACTIVE })
   status: string;
-
-  // Profile
 
   @ApiProperty()
   @Prop({ required: true })
   name: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional()
   @Prop({ required: false })
   avatar: string;
+
+  @ApiPropertyOptional()
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  createdBy: Types.ObjectId;
+
+  @ApiPropertyOptional({ nullable: true })
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  updatedBy: Types.ObjectId;
+
+  @ApiPropertyOptional({ nullable: true })
+  @Prop({ type: Types.ObjectId, ref: User.name, default: null })
+  deletedBy: Types.ObjectId;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time', nullable: true })
+  @Prop({ required: false, default: null })
+  deletedAt: Date | null;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  createdAt?: Date;
+
+  @ApiPropertyOptional({ type: String, format: 'date-time' })
+  updatedAt?: Date;
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

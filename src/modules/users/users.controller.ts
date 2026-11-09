@@ -7,6 +7,8 @@ import {
   Param,
   Delete,
   Query,
+  Request,
+  ParseBoolPipe,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -34,16 +36,21 @@ export class UsersController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a user' })
   @ApiCreatedResponse({ type: User })
-  create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return this.usersService.create(createUserDto);
+  create(@Request() req, @Body() createUserDto: CreateUserDto): Promise<User> {
+    return this.usersService.create(req.user, createUserDto);
   }
 
   @Public()
   @Get()
   @ApiOperation({ summary: 'List users (paginated)' })
   @ApiOkResponse({ type: PaginatedUserResponse })
-  findAll(@Query() params: UserParams) {
-    return this.usersService.findAll(params);
+  getAll(
+    @Query() params: UserParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    params.isDeleted = isDeleted;
+    return this.usersService.getAll(params);
   }
 
   @Public()
@@ -51,8 +58,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Get user by id' })
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ type: User })
-  findOne(@Param('id', IsObjectIdPipe) id: string) {
-    return this.usersService.findById(id);
+  getOne(@Param('id', IsObjectIdPipe) id: string) {
+    return this.usersService.getOne(id);
   }
 
   @Patch(':id')
@@ -61,18 +68,19 @@ export class UsersController {
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ type: User })
   update(
+    @Request() req,
     @Param('id', IsObjectIdPipe) id: string,
     @Body() updateUserDto: UpdateUserDto,
   ) {
-    return this.usersService.update(id, updateUserDto);
+    return this.usersService.update(req.user, id, updateUserDto);
   }
 
   @Delete(':id')
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Delete user by id' })
+  @ApiOperation({ summary: 'Soft-delete a user' })
   @ApiParam({ name: 'id', type: String })
   @ApiOkResponse({ type: User })
-  remove(@Param('id', IsObjectIdPipe) id: string) {
-    return this.usersService.remove(id);
+  delete(@Request() req, @Param('id', IsObjectIdPipe) id: string) {
+    return this.usersService.delete(req.user, id);
   }
 }
