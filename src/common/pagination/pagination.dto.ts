@@ -2,19 +2,19 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
 export class MetadataDto {
-  @ApiProperty()
+  @ApiProperty({ example: 10 })
   readonly pageSize: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 1 })
   readonly currentPage: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 5 })
   readonly totalPages: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: 42 })
   readonly totalCount: number;
 
-  @ApiProperty()
+  @ApiProperty({ example: true })
   readonly hasNextPage: boolean;
 
   constructor(
@@ -33,12 +33,11 @@ export class MetadataDto {
 }
 
 export class PaginationDto<T> {
-  @ApiProperty({ type: [Object] })
+  @ApiProperty({ isArray: true })
   @Type(() => Object)
   readonly data: T;
 
-  @ApiProperty({ type: [Object] })
-  @Type(() => Object)
+  @ApiProperty({ type: MetadataDto })
   readonly metadata: MetadataDto;
 
   constructor(data: T, metadata: MetadataDto) {

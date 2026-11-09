@@ -13,7 +13,8 @@ export enum UserStatus {
 
 export class UserParams extends PaginationParams {
   @ApiPropertyOptional({
-    description: '`active` | `inactive`',
+    enum: UserStatus,
+    description: 'Filter by account status',
   })
   status?: UserStatus;
 }

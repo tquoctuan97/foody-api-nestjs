@@ -3,7 +3,8 @@ import { PaginationParams } from 'src/common/pagination/pagination.model';
 
 export class CustomerParams extends PaginationParams {
   @ApiPropertyOptional({
-    description: 'get deleted customer list',
+    type: Boolean,
+    description: 'When true, list soft-deleted customers only',
   })
   isDeleted?: boolean;
 }

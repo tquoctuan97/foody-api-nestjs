@@ -1,22 +1,12 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateCustomerDto {
-  @ApiProperty({
-    required: true,
-    type: String,
-  })
+  @ApiProperty({ example: 'Nguyen Van A' })
   name: string;
 
-  @ApiProperty({
-    required: true,
-    type: String,
-  })
+  @ApiProperty({ example: 'Anh A' })
   displayName: string;
 
-  @ApiProperty({
-    required: false,
-    default: null,
-    type: String,
-  })
+  @ApiPropertyOptional({ nullable: true, type: Number, example: null })
   phoneNumber: number | null;
 }

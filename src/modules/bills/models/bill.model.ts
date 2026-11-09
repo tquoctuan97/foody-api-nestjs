@@ -16,11 +16,21 @@ export class BillParams extends PaginationParams {
   })
   billDateTo?: string;
   @ApiPropertyOptional({
-    description: 'get deleted bill list',
+    type: Boolean,
+    description: 'When true, list soft-deleted bills only',
   })
   isDeleted?: boolean;
   @ApiPropertyOptional({
     description: 'get bill list by customer id',
   })
   customerId?: string;
+}
+
+export class BillSummaryParams extends BillParams {
+  @ApiPropertyOptional({
+    enum: ['date', 'customer'],
+    default: 'date',
+    description: 'Aggregate bills in the date range by day or by customer',
+  })
+  groupBy?: 'date' | 'customer';
 }

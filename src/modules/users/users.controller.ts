@@ -8,14 +8,22 @@ import {
   Delete,
   Query,
 } from '@nestjs/common';
-
-import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Public } from '../auth/decorators/public.decorator';
+import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { UserParams } from './models/user.model';
+import { PaginatedUserResponse } from './dto/user-response.dto';
 
 @Controller('api/v1/admin/users')
 @ApiTags('admin/users')
@@ -23,29 +31,48 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  create(@Body() createStoreDto: CreateUserDto): Promise<User> {
-    return this.usersService.create(createStoreDto);
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a user' })
+  @ApiCreatedResponse({ type: User })
+  create(@Body() createUserDto: CreateUserDto): Promise<User> {
+    return this.usersService.create(createUserDto);
   }
 
   @Public()
   @Get()
+  @ApiOperation({ summary: 'List users (paginated)' })
+  @ApiOkResponse({ type: PaginatedUserResponse })
   findAll(@Query() params: UserParams) {
     return this.usersService.findAll(params);
   }
 
   @Public()
   @Get(':id')
-  findOne(@Param('id') id: string) {
+  @ApiOperation({ summary: 'Get user by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ type: User })
+  findOne(@Param('id', IsObjectIdPipe) id: string) {
     return this.usersService.findById(id);
   }
 
   @Patch(':id')
-  update(@Param('id') id: string, @Body() updateStoreDto: UpdateUserDto) {
-    return this.usersService.update(id, updateStoreDto);
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update user by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ type: User })
+  update(
+    @Param('id', IsObjectIdPipe) id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    return this.usersService.update(id, updateUserDto);
   }
 
   @Delete(':id')
-  remove(@Param('id') id: string) {
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Delete user by id' })
+  @ApiParam({ name: 'id', type: String })
+  @ApiOkResponse({ type: User })
+  remove(@Param('id', IsObjectIdPipe) id: string) {
     return this.usersService.remove(id);
   }
 }

@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export class SignInDto {
-  @ApiProperty()
+  @ApiProperty({ example: 'user@example.com' })
   email: string;
 
-  @ApiProperty()
+  @ApiProperty({ example: 'secret123', minLength: 6 })
   password: string;
 }
 
@@ -12,9 +12,9 @@ export class ChangePasswordDto {
   @ApiProperty()
   oldPassword: string;
 
-  @ApiProperty()
+  @ApiProperty({ minLength: 6 })
   newPassword: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Must match newPassword' })
   confirmPassword: string;
 }
