@@ -24,7 +24,7 @@ async function bootstrap() {
         'Routes marked public skip the guard (some user list/detail endpoints).',
         '',
         '**Pagination:** `page`, `pageSize`, `search`, `sort` (`+field` ascending, `-field` descending).',
-        '**Soft delete:** Bills and customers support `isDeleted=true` on list queries.',
+        '**Soft delete:** Bills, customers, and products support `isDeleted=true` on list queries.',
       ].join('\n'),
     )
     .setVersion('2.0.0')
@@ -40,6 +40,7 @@ async function bootstrap() {
     .addTag('auth', 'Sign-in and session')
     .addTag('admin/users', 'User accounts')
     .addTag('admin/customers', 'Customers')
+    .addTag('admin/products', 'Products')
     .addTag('admin/bills', 'Bills and summaries')
     .build();
 

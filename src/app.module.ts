@@ -5,6 +5,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { CustomersModule } from './modules/customers/customers.module';
+import { ProductsModule } from './modules/products/products.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -16,6 +17,7 @@ import { CustomersModule } from './modules/customers/customers.module';
     UsersModule,
     BillsModule,
     CustomersModule,
+    ProductsModule,
   ],
   // providers: [
   //   {
