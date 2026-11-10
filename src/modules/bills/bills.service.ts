@@ -184,7 +184,7 @@ export class BillsService {
         customerId: new Types.ObjectId(customerId),
         deletedAt: null,
       })
-      .sort('-createdAt')
+      .sort({ billDate: -1, createdAt: -1 })
       .populate(billDetailPopulateOptions())
       .exec();
 
