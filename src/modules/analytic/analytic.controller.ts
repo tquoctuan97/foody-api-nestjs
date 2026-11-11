@@ -19,6 +19,7 @@ import {
 import { BillSummaryParams } from '../bills/models/bill.model';
 import { AnalyticService } from './analytic.service';
 import { UnlinkedBillsByCustomerItemDto } from './dto/unlinked-bills-response.dto';
+import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
 import { UnlinkedBillsParams } from './models/unlinked-bills.params';
 
 @Controller('api/v1/admin/analytic')
@@ -85,5 +86,19 @@ export class AnalyticController {
     isDeleted?: boolean,
   ) {
     return this.analyticService.getUnlinkedBills(query, isDeleted);
+  }
+
+  @Get('unlinked-bill-items')
+  @ApiOperation({
+    summary:
+      'Paginated bills with at least one billList line missing productId (optional search on line name).',
+  })
+  @ApiOkResponse({ type: PaginatedBillResponse })
+  getUnlinkedBillItems(
+    @Query() query: UnlinkedBillItemsParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getUnlinkedBillItems(query, isDeleted);
   }
 }

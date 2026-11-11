@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Document, Types } from 'mongoose';
 import { AdjustmentItem, BillItem } from '../dto/create-bill.dto';
+import { BillListItemSchema } from './bill-item.schema';
 import { User } from 'src/modules/users/entities/user.entity';
 import { Customer } from 'src/modules/customers/entities/customer.entity';
 
@@ -20,7 +21,7 @@ export class Bill extends Document {
   customerId: string;
 
   @ApiProperty({ type: [BillItem] })
-  @Prop({ required: true })
+  @Prop({ type: [BillListItemSchema], required: true })
   billList: BillItem[];
 
   @ApiProperty()

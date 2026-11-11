@@ -8,11 +8,31 @@ import {
 } from 'src/common/pagination/paginate';
 import { Bill } from '../bills/entities/bill.entity';
 import { billDetailPopulateOptions } from '../bills/bill-populate';
+import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
 import { UnlinkedBillsParams } from './models/unlinked-bills.params';
 
 function unlinkedCustomerFilter(): FilterQuery<Bill> {
   return {
     $or: [{ customerId: null }, { customerId: { $exists: false } }],
+  };
+}
+
+function unlinkedProductIdClause() {
+  return {
+    $or: [{ productId: null }, { productId: { $exists: false } }],
+  };
+}
+
+function billsWithUnlinkedProductLinesFilter(
+  searchRegex?: RegExp,
+): FilterQuery<Bill> {
+  return {
+    billList: {
+      $elemMatch: {
+        ...unlinkedProductIdClause(),
+        ...(searchRegex && { name: searchRegex }),
+      },
+    },
   };
 }
 
@@ -63,6 +83,33 @@ export class AnalyticService {
         ])
         .exec();
     }
+
+    const { currentPage, pageSize } = parsePagination(query);
+    const totalCount = await this.billModel.countDocuments(match);
+
+    const data = await this.billModel
+      .find(match)
+      .sort(query.sort || '-billDate')
+      .skip((currentPage - 1) * pageSize)
+      .limit(pageSize)
+      .populate(billDetailPopulateOptions())
+      .exec();
+
+    return buildPaginatedResult(data, totalCount, currentPage, pageSize);
+  }
+
+  async getUnlinkedBillItems(
+    query: UnlinkedBillItemsParams,
+    isDeleted?: boolean,
+  ) {
+    const searchRegex = query.search?.trim()
+      ? new RegExp(query.search.trim(), 'i')
+      : undefined;
+
+    const match: FilterQuery<Bill> = {
+      ...softDeleteFilter(isDeleted),
+      ...billsWithUnlinkedProductLinesFilter(searchRegex),
+    };
 
     const { currentPage, pageSize } = parsePagination(query);
     const totalCount = await this.billModel.countDocuments(match);

@@ -22,9 +22,23 @@ export function billCustomerPopulateOption() {
   };
 }
 
+export function billBillListProductPopulateOption() {
+  return {
+    path: 'billList.productId',
+    select: 'name',
+    transform: (product?: { _id: unknown; name: string }) => {
+      if (!product) {
+        return product;
+      }
+      return { _id: product._id, name: product.name };
+    },
+  };
+}
+
 export function billDetailPopulateOptions() {
   return [
     billCustomerPopulateOption(),
+    billBillListProductPopulateOption(),
     ...['createdBy', 'updatedBy', 'deletedBy'].map((path) => ({
       path,
       transform: mapAuditUser,

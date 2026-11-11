@@ -18,7 +18,7 @@ import {
   softDeleteFilter,
 } from 'src/common/pagination/paginate';
 import { UserRequest } from '../auth/models/auth.model';
-import { CreateBillDto } from './dto/create-bill.dto';
+import { BillItem, CreateBillDto } from './dto/create-bill.dto';
 import { BulkPatchBillsDto } from './dto/bulk-patch-bills.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
@@ -30,6 +30,19 @@ export class BillsService {
   constructor(
     @InjectModel(Bill.name) private readonly billModel: Model<Bill>,
   ) {}
+
+  private mapBillListItems(items: BillItem[]) {
+    return items.map((item) => ({
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+      total: item.total,
+      productId:
+        item.productId == null || item.productId === ''
+          ? null
+          : new Types.ObjectId(item.productId),
+    }));
+  }
 
   private validateAndParseDates(query: BillParams): {
     billDate?: Date;
@@ -126,7 +139,7 @@ export class BillsService {
 
     const newBill = new this.billModel({
       billDate,
-      billList,
+      billList: this.mapBillListItems(billList),
       customerName,
       customerId: customerId ? new Types.ObjectId(customerId) : null,
       debt,
@@ -157,6 +170,9 @@ export class BillsService {
         ...updateBillDto,
         ...(updateBillDto.customerId && {
           customerId: new Types.ObjectId(updateBillDto.customerId),
+        }),
+        ...(updateBillDto.billList && {
+          billList: this.mapBillListItems(updateBillDto.billList),
         }),
         ...setUpdatedBy(user.id),
       })

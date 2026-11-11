@@ -1,4 +1,4 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsDate,
@@ -8,6 +8,7 @@ import {
   IsOptional,
   IsString,
   Min,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { IsObjectId } from 'src/common/is-object-id/is-object-id.decorator';
@@ -38,6 +39,17 @@ export class BillItem {
   })
   @IsNumber()
   total: number;
+
+  @ApiPropertyOptional({
+    type: String,
+    nullable: true,
+    description: 'Link to catalog product',
+  })
+  @IsOptional()
+  @ValidateIf((_, value) => value != null && value !== '')
+  @IsString()
+  @IsObjectId()
+  productId?: string | null;
 }
 
 export class AdjustmentItem {
