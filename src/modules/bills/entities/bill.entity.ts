@@ -28,14 +28,6 @@ export class Bill extends Document {
   @Prop({ required: true })
   sum: number;
 
-  @ApiPropertyOptional({ nullable: true, deprecated: true })
-  @Prop({ required: false, default: null })
-  debt: number | null;
-
-  @ApiPropertyOptional({ nullable: true, deprecated: true })
-  @Prop({ required: false, default: null })
-  prePay: number | null;
-
   @ApiProperty({ type: [AdjustmentItem], default: [] })
   @Prop({ required: false, default: [] })
   adjustmentList: AdjustmentItem[];

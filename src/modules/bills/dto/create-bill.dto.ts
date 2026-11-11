@@ -103,27 +103,6 @@ export class CreateBillDto {
   })
   sum: number;
 
-  @ApiProperty({
-    required: false,
-    default: null,
-    type: Number,
-    deprecated: true,
-  })
-  @IsOptional()
-  @IsNumber()
-  debt?: number | null;
-
-  @ApiProperty({
-    required: false,
-    default: null,
-    type: Number,
-    deprecated: true,
-  })
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  prePay?: number | null;
-
   @ApiProperty({ required: false, type: [AdjustmentItem] })
   @IsOptional()
   @ValidateNested({ each: true })
