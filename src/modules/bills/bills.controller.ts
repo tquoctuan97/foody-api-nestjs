@@ -3,6 +3,8 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseBoolPipe,
   Patch,
@@ -17,19 +19,22 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
-  getSchemaPath,
 } from '@nestjs/swagger';
 import { BillsService } from './bills.service';
 import { CreateBillDto } from './dto/create-bill.dto';
+import {
+  BulkDeleteBillsDto,
+  BulkDeleteBillsResultDto,
+} from './dto/bulk-delete-bills.dto';
+import {
+  BulkPatchBillsDto,
+  BulkPatchBillsResultDto,
+} from './dto/bulk-patch-bills.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
-import { BillParams, BillSummaryParams } from './models/bill.model';
+import { BillParams } from './models/bill.model';
 import { IsObjectIdPipe } from 'src/common/is-object-id/is-object-id.pipe';
-import {
-  BillSummaryByCustomerItemDto,
-  BillSummaryByDateItemDto,
-  PaginatedBillResponse,
-} from './dto/bill-response.dto';
+import { PaginatedBillResponse } from './dto/bill-response.dto';
 
 @Controller('api/v1/admin/bills')
 @ApiTags('admin/bills')
@@ -47,42 +52,6 @@ export class BillsController {
   ) {
     query.isDeleted = isDeleted;
     return this.billsService.getAll(query);
-  }
-
-  @Get('summary-bill')
-  @ApiOperation({
-    summary: 'Summarize bills in a date range',
-    description:
-      'Requires billDateFrom and billDateTo. groupBy aggregates by calendar day or customer.',
-  })
-  @ApiOkResponse({
-    schema: {
-      oneOf: [
-        {
-          type: 'array',
-          items: { $ref: getSchemaPath(BillSummaryByDateItemDto) },
-        },
-        {
-          type: 'array',
-          items: { $ref: getSchemaPath(BillSummaryByCustomerItemDto) },
-        },
-      ],
-    },
-  })
-  getSummaryBillByDate(
-    @Query() query: BillSummaryParams,
-    @Query('groupBy') groupBy: 'date' | 'customer',
-    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
-    isDeleted?: boolean,
-  ) {
-    return this.billsService.getBillsByRange(
-      query.billDateFrom,
-      query.billDateTo,
-      groupBy,
-      query.search,
-      query.customerId,
-      isDeleted,
-    );
   }
 
   @Get('latest/:customerId')
@@ -106,6 +75,23 @@ export class BillsController {
   @ApiCreatedResponse({ type: Bill })
   create(@Request() req, @Body() createBillDto: CreateBillDto) {
     return this.billsService.create(req.user, createBillDto);
+  }
+
+  @Patch('bulk')
+  @ApiOperation({
+    summary: 'Bulk patch bills (billDate, customerName, customerId only)',
+  })
+  @ApiOkResponse({ type: BulkPatchBillsResultDto })
+  bulkPatch(@Request() req, @Body() body: BulkPatchBillsDto) {
+    return this.billsService.bulkPatch(req.user, body);
+  }
+
+  @Post('bulk-delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Soft-delete multiple bills by id' })
+  @ApiOkResponse({ type: BulkDeleteBillsResultDto })
+  bulkDelete(@Request() req, @Body() body: BulkDeleteBillsDto) {
+    return this.billsService.deleteMany(req.user, body.ids);
   }
 
   @Patch(':id')

@@ -19,6 +19,7 @@ import {
 } from 'src/common/pagination/paginate';
 import { UserRequest } from '../auth/models/auth.model';
 import { CreateBillDto } from './dto/create-bill.dto';
+import { BulkPatchBillsDto } from './dto/bulk-patch-bills.dto';
 import { UpdateBillDto } from './dto/update-bill.dto';
 import { Bill } from './entities/bill.entity';
 import { BillParams } from './models/bill.model';
@@ -178,6 +179,90 @@ export class BillsService {
     return bill.populate(billDetailPopulateOptions());
   }
 
+  async bulkPatch(user: UserRequest, dto: BulkPatchBillsDto) {
+    const hasBillDate = dto.billDate != null;
+    const hasCustomerName = dto.customerName !== undefined;
+    const hasCustomerId = dto.customerId !== undefined;
+
+    if (!hasBillDate && !hasCustomerName && !hasCustomerId) {
+      throw new BadRequestException(
+        'Provide at least one of billDate, customerName, customerId',
+      );
+    }
+
+    const uniqueIds = [...new Set(dto.ids.map((id) => id.toLowerCase()))];
+    const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
+
+    const bills = await this.billModel
+      .find({ _id: { $in: objectIds }, deletedAt: null })
+      .select('createdBy')
+      .lean()
+      .exec();
+
+    if (bills.length !== uniqueIds.length) {
+      const found = new Set(bills.map((bill) => bill._id.toString()));
+      const missing = uniqueIds.filter((id) => !found.has(id));
+      throw new NotFoundException(`Bill not found: ${missing.join(', ')}`);
+    }
+
+    bills.forEach((bill) => {
+      assertOwnerOrAdmin(user, bill.createdBy, 'update this bill');
+    });
+
+    const $set: Record<string, unknown> = {
+      ...setUpdatedBy(user.id),
+    };
+
+    if (hasBillDate) {
+      $set.billDate = dto.billDate;
+    }
+    if (hasCustomerName) {
+      $set.customerName = dto.customerName!.trim();
+    }
+    if (hasCustomerId) {
+      $set.customerId =
+        dto.customerId == null || dto.customerId === ''
+          ? null
+          : new Types.ObjectId(dto.customerId);
+    }
+
+    const { modifiedCount } = await this.billModel.updateMany(
+      { _id: { $in: objectIds }, deletedAt: null },
+      { $set },
+    );
+
+    return { updated: modifiedCount };
+  }
+
+  async deleteMany(user: UserRequest, ids: string[]) {
+    const uniqueIds = [...new Set(ids.map((id) => id.toLowerCase()))];
+    const objectIds = uniqueIds.map((id) => new Types.ObjectId(id));
+
+    const bills = await this.billModel
+      .find({ _id: { $in: objectIds }, deletedAt: null })
+      .select('createdBy')
+      .lean()
+      .exec();
+
+    if (bills.length !== uniqueIds.length) {
+      const found = new Set(bills.map((bill) => bill._id.toString()));
+      const missing = uniqueIds.filter((id) => !found.has(id));
+      throw new NotFoundException(`Bill not found: ${missing.join(', ')}`);
+    }
+
+    bills.forEach((bill) => {
+      assertOwnerOrAdmin(user, bill.createdBy, 'delete this bill');
+    });
+
+    const audit = softDeleteAudit(user.id);
+    const { modifiedCount } = await this.billModel.updateMany(
+      { _id: { $in: objectIds }, deletedAt: null },
+      { $set: audit },
+    );
+
+    return { deleted: modifiedCount };
+  }
+
   async getLatestBill(customerId: string): Promise<Bill | null> {
     const latestBill = await this.billModel
       .findOne({
@@ -191,72 +276,4 @@ export class BillsService {
     return latestBill ?? null;
   }
 
-  async getBillsByRange(
-    from: string,
-    to: string,
-    groupBy: 'date' | 'customer' = 'date',
-    customerName?: string,
-    customerId?: string,
-    isDeleted?: boolean,
-  ): Promise<unknown[]> {
-    const matchStage: FilterQuery<Bill> = {
-      billDate: { $gte: new Date(from), $lte: new Date(to) },
-      ...softDeleteFilter(isDeleted),
-      ...(customerId && { customerId: new Types.ObjectId(customerId) }),
-      ...(customerName && {
-        customerName: new RegExp(customerName, 'i'),
-      }),
-    };
-
-    if (groupBy === 'customer') {
-      return this.billModel
-        .aggregate([
-          { $match: matchStage },
-          { $unwind: '$billList' },
-          {
-            $group: {
-              _id: '$customerId',
-              customerName: { $first: '$customerName' },
-              totalSpent: {
-                $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-              },
-              billCount: { $sum: 1 },
-            },
-          },
-          {
-            $project: {
-              _id: 0,
-              customerName: '$customerName',
-              customerId: '$_id',
-              totalSpent: 1,
-              billCount: 1,
-            },
-          },
-        ])
-        .exec();
-    }
-
-    return this.billModel
-      .aggregate([
-        { $match: matchStage },
-        { $unwind: '$billList' },
-        {
-          $group: {
-            _id: '$billDate',
-            totalSpent: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-            },
-          },
-        },
-        {
-          $project: {
-            _id: 0,
-            name: '$_id',
-            totalSpent: 1,
-          },
-        },
-        { $sort: { name: -1 } },
-      ])
-      .exec();
-  }
 }

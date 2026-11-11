@@ -24,6 +24,12 @@ export class BillParams extends PaginationParams {
     description: 'get bill list by customer id',
   })
   customerId?: string;
+  @ApiPropertyOptional({
+    type: Boolean,
+    description:
+      'When true, only bills without customerId (mutually exclusive with customerId)',
+  })
+  withoutCustomerId?: boolean;
 }
 
 export class BillSummaryParams extends BillParams {

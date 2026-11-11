@@ -38,7 +38,7 @@ import { PaginatedProductResponse } from './dto/product-response.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
-import { ProductParams } from './models/product.model';
+import { ProductListAllParams, ProductParams } from './models/product.model';
 import { ProductsService } from './products.service';
 
 @Controller('api/v1/admin/products')
@@ -57,6 +57,18 @@ export class ProductsController {
   ) {
     query.isDeleted = isDeleted;
     return this.productsService.getAll(query);
+  }
+
+  @Get('all')
+  @ApiOperation({ summary: 'List all products (no pagination)' })
+  @ApiOkResponse({ type: Product, isArray: true })
+  listAll(
+    @Query() query: ProductListAllParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    query.isDeleted = isDeleted;
+    return this.productsService.listAll(query);
   }
 
   @Post('import')

@@ -4,6 +4,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { DecodeUriPipe } from './common/decode-uri/decode-uri.pipe';
 import { BillSummaryByCustomerItemDto, BillSummaryByDateItemDto } from './modules/bills/dto/bill-response.dto';
+import { UnlinkedBillsByCustomerItemDto } from './modules/analytic/dto/unlinked-bills-response.dto';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -45,7 +46,11 @@ async function bootstrap() {
     .build();
 
   const document = SwaggerModule.createDocument(app, config, {
-    extraModels: [BillSummaryByDateItemDto, BillSummaryByCustomerItemDto],
+    extraModels: [
+      BillSummaryByDateItemDto,
+      BillSummaryByCustomerItemDto,
+      UnlinkedBillsByCustomerItemDto,
+    ],
   });
   SwaggerModule.setup('api', app, document, {
     swaggerOptions: {

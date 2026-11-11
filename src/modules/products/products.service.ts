@@ -26,7 +26,7 @@ import { Role } from '../users/models/user.model';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { Product } from './entities/product.entity';
-import { ProductParams } from './models/product.model';
+import { ProductListAllParams, ProductParams } from './models/product.model';
 import {
   ProductExchangeItem,
   parseImportItems,
@@ -62,6 +62,24 @@ export class ProductsService {
       .exec();
 
     return buildPaginatedResult(data, totalCount, currentPage, pageSize);
+  }
+
+  async listAll(query?: ProductListAllParams) {
+    await this.ensureSlugs();
+    const slug = convertVietnameseToSlug(query?.search || '');
+
+    const filter: FilterQuery<Product> = {
+      ...(slug && { slug: new RegExp(slug, 'i') }),
+      ...softDeleteFilter(query?.isDeleted),
+    };
+
+    return this.productModel
+      .find(filter)
+      .sort(query?.sort || '-createdAt')
+      .select('-slug')
+      .populate(auditUserPopulateOptions())
+      .lean<Product[]>()
+      .exec();
   }
 
   async getOne(id: string) {

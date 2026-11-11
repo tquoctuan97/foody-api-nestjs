@@ -1,0 +1,89 @@
+import {
+  Controller,
+  Get,
+  ParseBoolPipe,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger';
+import {
+  BillSummaryByCustomerItemDto,
+  BillSummaryByDateItemDto,
+  PaginatedBillResponse,
+} from '../bills/dto/bill-response.dto';
+import { BillSummaryParams } from '../bills/models/bill.model';
+import { AnalyticService } from './analytic.service';
+import { UnlinkedBillsByCustomerItemDto } from './dto/unlinked-bills-response.dto';
+import { UnlinkedBillsParams } from './models/unlinked-bills.params';
+
+@Controller('api/v1/admin/analytic')
+@ApiTags('admin/analytic')
+@ApiBearerAuth()
+export class AnalyticController {
+  constructor(private readonly analyticService: AnalyticService) {}
+
+  @Get('summary-bill')
+  @ApiOperation({
+    summary: 'Summarize bills in a date range',
+    description:
+      'Requires billDateFrom and billDateTo. groupBy aggregates by calendar day or customer.',
+  })
+  @ApiOkResponse({
+    schema: {
+      oneOf: [
+        {
+          type: 'array',
+          items: { $ref: getSchemaPath(BillSummaryByDateItemDto) },
+        },
+        {
+          type: 'array',
+          items: { $ref: getSchemaPath(BillSummaryByCustomerItemDto) },
+        },
+      ],
+    },
+  })
+  getSummaryBillByDate(
+    @Query() query: BillSummaryParams,
+    @Query('groupBy') groupBy: 'date' | 'customer',
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getBillsByRange(
+      query.billDateFrom,
+      query.billDateTo,
+      groupBy,
+      query.search,
+      query.customerId,
+      isDeleted,
+    );
+  }
+
+  @Get('unlinked-bills')
+  @ApiOperation({
+    summary:
+      'Bills without customerId. groupBy=customerName for totals; customerName=… for that name’s bills (paginated).',
+  })
+  @ApiOkResponse({
+    schema: {
+      oneOf: [
+        { $ref: getSchemaPath(PaginatedBillResponse) },
+        {
+          type: 'array',
+          items: { $ref: getSchemaPath(UnlinkedBillsByCustomerItemDto) },
+        },
+      ],
+    },
+  })
+  getUnlinkedBills(
+    @Query() query: UnlinkedBillsParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getUnlinkedBills(query, isDeleted);
+  }
+}
