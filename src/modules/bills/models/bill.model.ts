@@ -8,11 +8,13 @@ export class BillParams extends PaginationParams {
   billDate?: string;
   @ApiPropertyOptional({
     example: '2024-01-01T00:00:00.000Z',
-    description: 'billDateFrom must be the same or before billDateTo',
+    description:
+      'Filter by billDate (invoice date), not createdAt. billDateFrom must be the same or before billDateTo',
   })
   billDateFrom?: string;
   @ApiPropertyOptional({
     example: '2024-01-31T00:00:00.000Z',
+    description: 'Upper bound on billDate (invoice date), not createdAt',
   })
   billDateTo?: string;
   @ApiPropertyOptional({

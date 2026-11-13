@@ -1,15 +1,15 @@
 /**
- * Gán productId cho billList (khớp tên product.name === item.name).
+ * Gán productId cho billList (khớp product.name === item.name).
  *
  *   use("inkvenio-dev")
- *   paste hoặc load script
+ *   load("scripts/mongosh/migrate-bill-list-product-id.js")
  *
- * DRY_RUN=true: chỉ in kết quả.
- * LIMIT: số bill xử lý (mặc định 10).
+ * DRY_RUN=true: không ghi, chỉ đếm.
+ * Mỗi lượt 100 bill theo _id, bulkWrite một lần, nghỉ giữa các lượt, đến khi hết.
  */
-
 const DRY_RUN = true;
-const LIMIT = 10;
+const BATCH = 100;
+const PAUSE_MS = 200;
 
 function convertVietnameseToSlug(title) {
   if (!title) return '';
@@ -39,42 +39,6 @@ function lineNeedsProductId(item) {
   return item.productId == null;
 }
 
-function resolveProductId(name, cache) {
-  if (cache[name]) {
-    return { ok: true, productId: cache[name], action: 'linked', fromCache: true };
-  }
-
-  const matches = db.products
-    .find({ name, deletedAt: null })
-    .limit(3)
-    .toArray();
-
-  if (matches.length > 1) {
-    return { ok: false, action: 'skip_ambiguous', count: matches.length };
-  }
-  if (matches.length === 1) {
-    const id = matches[0]._id;
-    cache[name] = id;
-    return { ok: true, productId: id, action: 'linked' };
-  }
-
-  if (DRY_RUN) {
-    return { ok: true, productId: null, action: 'would_create' };
-  }
-
-  const now = new Date();
-  const insert = db.products.insertOne({
-    name,
-    slug: convertVietnameseToSlug(name),
-    deletedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  });
-  const id = insert.insertedId;
-  cache[name] = id;
-  return { ok: true, productId: id, action: 'created' };
-}
-
 const billFilter = {
   deletedAt: null,
   billList: {
@@ -84,77 +48,105 @@ const billFilter = {
   },
 };
 
-const bills = db.bills.find(billFilter).sort({ billDate: 1 }).limit(LIMIT).toArray();
+/** name → ObjectId, hoặc null nếu trùng tên. Một lần quét, không query theo từng dòng. */
+const productByName = {};
+db.products.find({ deletedAt: null }, { name: 1 }).forEach((product) => {
+  if (!Object.prototype.hasOwnProperty.call(productByName, product.name)) {
+    productByName[product.name] = product._id;
+    return;
+  }
+  productByName[product.name] = null;
+});
 
-const nameCache = {};
+function resolveProductId(name) {
+  if (Object.prototype.hasOwnProperty.call(productByName, name)) {
+    const productId = productByName[name];
+    if (productId == null) return { ok: false, action: 'skip_ambiguous' };
+    return { ok: true, productId, action: 'linked' };
+  }
+
+  if (DRY_RUN) return { ok: true, productId: null, action: 'would_create' };
+
+  const now = new Date();
+  const insert = db.products.insertOne({
+    name,
+    slug: convertVietnameseToSlug(name),
+    deletedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  });
+  productByName[name] = insert.insertedId;
+  return { ok: true, productId: insert.insertedId, action: 'created' };
+}
+
+let lastId = null;
+let batches = 0;
+let billsScanned = 0;
 let billsUpdated = 0;
 let linesLinked = 0;
 let linesCreated = 0;
 let linesAmbiguous = 0;
 let linesWouldCreate = 0;
+const ambiguousNames = {};
 
-for (const bill of bills) {
-  let billChanged = false;
-  const lineLog = [];
+while (true) {
+  const filter = lastId ? { ...billFilter, _id: { $gt: lastId } } : billFilter;
+  const bills = db.bills
+    .find(filter)
+    .sort({ _id: 1 })
+    .limit(BATCH)
+    .toArray();
+  if (!bills.length) break;
 
-  const newBillList = bill.billList.map((item) => {
-    if (!lineNeedsProductId(item)) {
-      return item;
-    }
+  batches++;
+  billsScanned += bills.length;
+  lastId = bills[bills.length - 1]._id;
+  const ops = [];
 
-    const name = item.name;
-    const resolved = resolveProductId(name, nameCache);
+  for (const bill of bills) {
+    const $set = {};
+    bill.billList.forEach((item, index) => {
+      if (!lineNeedsProductId(item)) return;
 
-    if (!resolved.ok) {
-      linesAmbiguous++;
-      lineLog.push({
-        name,
-        action: resolved.action,
-        productMatches: resolved.count,
-      });
-      return item;
-    }
-
-    if (resolved.action === 'would_create') {
-      linesWouldCreate++;
-      lineLog.push({ name, action: resolved.action });
-      billChanged = true;
-      return { ...item, productId: item.productId ?? null };
-    }
-
-    if (resolved.action === 'created') linesCreated++;
-    if (resolved.action === 'linked') linesLinked++;
-
-    billChanged = true;
-    lineLog.push({
-      name,
-      action: resolved.action,
-      productId: resolved.productId,
+      const resolved = resolveProductId(item.name);
+      if (!resolved.ok) {
+        linesAmbiguous++;
+        ambiguousNames[item.name] = (ambiguousNames[item.name] || 0) + 1;
+        return;
+      }
+      if (resolved.action === 'would_create') {
+        linesWouldCreate++;
+        return;
+      }
+      if (resolved.action === 'created') linesCreated++;
+      else linesLinked++;
+      $set[`billList.${index}.productId`] = resolved.productId;
     });
 
-    return { ...item, productId: resolved.productId };
-  });
-
-  if (!billChanged && lineLog.length === 0) continue;
-
-  printjson({
-    _id: bill._id,
-    customerName: bill.customerName,
-    billDate: bill.billDate,
-    dryRun: DRY_RUN,
-    lines: lineLog,
-    adjustmentList: bill.adjustmentList ?? [],
-    billListAfter: DRY_RUN ? newBillList : undefined,
-  });
-
-  if (!DRY_RUN && lineLog.some((l) => l.action !== 'skip_ambiguous')) {
-    db.bills.updateOne({ _id: bill._id }, { $set: { billList: newBillList } });
-    billsUpdated++;
+    if (!Object.keys($set).length) continue;
+    ops.push({
+      updateOne: {
+        filter: { _id: bill._id },
+        update: { $set },
+      },
+    });
   }
+
+  if (!DRY_RUN && ops.length) {
+    db.bills.bulkWrite(ops, { ordered: false });
+    billsUpdated += ops.length;
+  }
+
+  print(
+    `batch ${batches}: scanned=${bills.length} toUpdate=${ops.length} lastId=${lastId}`,
+  );
+  // ponytail: nghỉ cố định giữa các lượt; bỏ sleep nếu primary còn rảnh
+  if (bills.length === BATCH) sleep(PAUSE_MS);
 }
 
 print('---');
-print(`DRY_RUN=${DRY_RUN} | bills scanned=${bills.length} | limit=${LIMIT}`);
+print(`DRY_RUN=${DRY_RUN} | batches=${batches} | bills scanned=${billsScanned}`);
 print(
   `linked=${linesLinked} created=${linesCreated} wouldCreate=${linesWouldCreate} ambiguous=${linesAmbiguous} billsUpdated=${billsUpdated}`,
 );
+if (linesAmbiguous) printjson(ambiguousNames);

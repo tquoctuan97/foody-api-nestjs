@@ -16,7 +16,8 @@ const WARN =
 
 const filter = {
   deletedAt: null,
-  $or: [{ debt: { $ne: null } }, { prePay: { $ne: null } }],
+  adjustmentList: { $exists: false },
+  $or: [{ debt: { $gt: 0 } }, { prePay: { $gt: 0 } }],
 };
 
 function upsert(list, name, type, amount) {
