@@ -127,7 +127,7 @@ export class ProductsService {
         : undefined;
 
     if (name && name !== product.name) {
-      await this.checkNameExist(name);
+      await this.checkNameExist(name, product._id);
     }
 
     await product
@@ -347,9 +347,14 @@ export class ProductsService {
     return trimmed;
   }
 
-  private async checkNameExist(name: string) {
+  /** Khớp đúng `name` (đã trim) — create, update đổi tên, import đều qua đây / conflict import. */
+  private async checkNameExist(name: string, excludeId?: Types.ObjectId) {
     const product = await this.productModel
-      .findOne({ name, deletedAt: null })
+      .findOne({
+        name,
+        deletedAt: null,
+        ...(excludeId && { _id: { $ne: excludeId } }),
+      })
       .exec();
 
     if (product) {

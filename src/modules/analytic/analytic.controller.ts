@@ -18,7 +18,9 @@ import {
 } from '../bills/dto/bill-response.dto';
 import { BillSummaryParams } from '../bills/models/bill.model';
 import { AnalyticService } from './analytic.service';
+import { CustomerPurchaseReportDto } from './dto/customer-purchase-report.dto';
 import { UnlinkedBillsByCustomerItemDto } from './dto/unlinked-bills-response.dto';
+import { CustomerPurchaseReportParams } from './models/customer-purchase-report.params';
 import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
 import { UnlinkedBillsParams } from './models/unlinked-bills.params';
 
@@ -100,5 +102,19 @@ export class AnalyticController {
     isDeleted?: boolean,
   ) {
     return this.analyticService.getUnlinkedBillItems(query, isDeleted);
+  }
+
+  @Get('customer-purchase-report')
+  @ApiOperation({
+    summary:
+      'Customer purchase report: bill sum total + per-product purchase count/amount (billDate range). Lines without productId are skipped.',
+  })
+  @ApiOkResponse({ type: CustomerPurchaseReportDto })
+  getCustomerPurchaseReport(
+    @Query() query: CustomerPurchaseReportParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getCustomerPurchaseReport(query, isDeleted);
   }
 }

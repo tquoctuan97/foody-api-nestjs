@@ -8,6 +8,7 @@ import {
 } from 'src/common/pagination/paginate';
 import { Bill } from '../bills/entities/bill.entity';
 import { billDetailPopulateOptions } from '../bills/bill-populate';
+import { CustomerPurchaseReportParams } from './models/customer-purchase-report.params';
 import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
 import { UnlinkedBillsParams } from './models/unlinked-bills.params';
 
@@ -41,6 +42,20 @@ export class AnalyticService {
   constructor(
     @InjectModel(Bill.name) private readonly billModel: Model<Bill>,
   ) {}
+
+  private parseBillDateRange(from: string, to: string) {
+    const billDateFrom = new Date(from);
+    const billDateTo = new Date(to);
+    if (isNaN(billDateFrom.getTime()) || isNaN(billDateTo.getTime())) {
+      throw new BadRequestException('billDateFrom and billDateTo must be valid dates');
+    }
+    if (billDateFrom > billDateTo) {
+      throw new BadRequestException(
+        'billDateFrom cannot be greater than billDateTo',
+      );
+    }
+    return { billDateFrom, billDateTo };
+  }
 
   async getUnlinkedBills(query: UnlinkedBillsParams, isDeleted?: boolean) {
     const exactName = query.customerName?.trim();
@@ -192,5 +207,145 @@ export class AnalyticService {
         { $sort: { name: -1 } },
       ])
       .exec();
+  }
+
+  async getCustomerPurchaseReport(
+    query: CustomerPurchaseReportParams,
+    isDeleted?: boolean,
+  ) {
+    const { billDateFrom, billDateTo } = this.parseBillDateRange(
+      query.billDateFrom,
+      query.billDateTo,
+    );
+
+    const match: FilterQuery<Bill> = {
+      customerId: new Types.ObjectId(query.customerId),
+      billDate: { $gte: billDateFrom, $lte: billDateTo },
+      ...softDeleteFilter(isDeleted),
+    };
+
+    const [facet] = await this.billModel
+      .aggregate([
+        { $match: match },
+        {
+          $facet: {
+            summary: [
+              {
+                $group: {
+                  _id: null,
+                  billCount: { $sum: 1 },
+                  sumTotal: { $sum: '$sum' },
+                },
+              },
+              { $project: { _id: 0, billCount: 1, sumTotal: 1 } },
+            ],
+            sumByDate: [
+              {
+                $group: {
+                  _id: '$billDate',
+                  sum: { $sum: '$sum' },
+                },
+              },
+              { $project: { _id: 0, date: '$_id', sum: 1 } },
+              { $sort: { date: 1 } },
+            ],
+            minBill: [
+              { $sort: { sum: 1, _id: 1 } },
+              { $limit: 1 },
+              {
+                $project: {
+                  _id: 0,
+                  billId: { $toString: '$_id' },
+                  sum: 1,
+                  billDate: 1,
+                },
+              },
+            ],
+            maxBill: [
+              { $sort: { sum: -1, _id: 1 } },
+              { $limit: 1 },
+              {
+                $project: {
+                  _id: 0,
+                  billId: { $toString: '$_id' },
+                  sum: 1,
+                  billDate: 1,
+                },
+              },
+            ],
+            debtBill: [
+              { $match: { finalResult: { $gt: 0 } } },
+              { $sort: { billDate: -1, createdAt: -1 } },
+              { $limit: 1 },
+              {
+                $project: {
+                  _id: 0,
+                  billId: { $toString: '$_id' },
+                  finalResult: 1,
+                  billDate: 1,
+                },
+              },
+            ],
+          },
+        },
+      ])
+      .exec();
+
+    const summary = facet?.summary?.[0];
+    const billCount = summary?.billCount ?? 0;
+    const sumTotal = summary?.sumTotal ?? 0;
+    const avgSumPerBill = billCount > 0 ? sumTotal / billCount : 0;
+    const minBill = facet?.minBill?.[0] ?? null;
+    const maxBill = facet?.maxBill?.[0] ?? null;
+    const sumByDate = facet?.sumByDate ?? [];
+    const debtBill = facet?.debtBill?.[0] ?? null;
+    const outstandingDebt = debtBill?.finalResult ?? 0;
+    const netValue = sumTotal - outstandingDebt;
+
+    const byProduct = await this.billModel
+      .aggregate([
+        { $match: match },
+        { $unwind: '$billList' },
+        {
+          $match: {
+            'billList.productId': { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: '$billList.productId',
+            productName: { $first: '$billList.name' },
+            purchaseCount: { $sum: 1 },
+            amountTotal: { $sum: '$billList.total' },
+          },
+        },
+        { $sort: { amountTotal: -1, productName: 1 } },
+        {
+          $project: {
+            _id: 0,
+            productId: '$_id',
+            productName: 1,
+            purchaseCount: 1,
+            amountTotal: 1,
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      customerId: query.customerId,
+      billDateFrom: query.billDateFrom,
+      billDateTo: query.billDateTo,
+      billCount,
+      sumTotal,
+      avgSumPerBill,
+      minBill,
+      maxBill,
+      sumByDate,
+      outstandingDebt,
+      netValue,
+      debtBill,
+      byProduct,
+    };
   }
 }
