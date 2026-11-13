@@ -8,6 +8,7 @@ import {
 } from 'src/common/pagination/paginate';
 import { Bill } from '../bills/entities/bill.entity';
 import { billDetailPopulateOptions } from '../bills/bill-populate';
+import { CustomerProductHabitsParams } from './models/customer-product-habits.params';
 import { CustomerPurchaseReportParams } from './models/customer-purchase-report.params';
 import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
 import { UnlinkedBillsParams } from './models/unlinked-bills.params';
@@ -209,6 +210,72 @@ export class AnalyticService {
       .exec();
   }
 
+  private async aggregateByProductForBills(
+    billIds: Types.ObjectId[],
+    sortBy: 'purchaseCount' | 'amountTotal' = 'purchaseCount',
+  ) {
+    if (!billIds.length) {
+      return [];
+    }
+
+    return this.billModel
+      .aggregate([
+        { $match: { _id: { $in: billIds } } },
+        { $unwind: '$billList' },
+        {
+          $match: {
+            'billList.productId': { $exists: true, $ne: null },
+          },
+        },
+        {
+          $group: {
+            _id: '$billList.productId',
+            productName: { $first: '$billList.name' },
+            purchaseCount: { $sum: 1 },
+            amountTotal: { $sum: '$billList.total' },
+          },
+        },
+        {
+          $sort:
+            sortBy === 'amountTotal'
+              ? { amountTotal: -1, productName: 1 }
+              : { purchaseCount: -1, productName: 1 },
+        },
+        {
+          $project: {
+            _id: 0,
+            productId: { $toString: '$_id' },
+            productName: 1,
+            purchaseCount: 1,
+            amountTotal: 1,
+          },
+        },
+      ])
+      .exec();
+  }
+
+  async getCustomerProductHabits(query: CustomerProductHabitsParams) {
+    const billLimit = query.billLimit ?? 30;
+    const customerId = new Types.ObjectId(query.customerId);
+
+    const recentBills = await this.billModel
+      .find({ customerId, deletedAt: null })
+      .sort({ billDate: -1, createdAt: -1 })
+      .limit(billLimit)
+      .select('_id')
+      .lean()
+      .exec();
+
+    const billIds = recentBills.map((bill) => bill._id as Types.ObjectId);
+    const products = await this.aggregateByProductForBills(billIds);
+
+    return {
+      customerId: query.customerId,
+      billsSampled: billIds.length,
+      products,
+    };
+  }
+
   async getCustomerPurchaseReport(
     query: CustomerPurchaseReportParams,
     isDeleted?: boolean,
@@ -302,35 +369,15 @@ export class AnalyticService {
     const outstandingDebt = debtBill?.finalResult ?? 0;
     const netValue = sumTotal - outstandingDebt;
 
-    const byProduct = await this.billModel
-      .aggregate([
-        { $match: match },
-        { $unwind: '$billList' },
-        {
-          $match: {
-            'billList.productId': { $exists: true, $ne: null },
-          },
-        },
-        {
-          $group: {
-            _id: '$billList.productId',
-            productName: { $first: '$billList.name' },
-            purchaseCount: { $sum: 1 },
-            amountTotal: { $sum: '$billList.total' },
-          },
-        },
-        { $sort: { amountTotal: -1, productName: 1 } },
-        {
-          $project: {
-            _id: 0,
-            productId: '$_id',
-            productName: 1,
-            purchaseCount: 1,
-            amountTotal: 1,
-          },
-        },
-      ])
+    const billsInRange = await this.billModel
+      .find(match)
+      .select('_id')
+      .lean()
       .exec();
+    const byProduct = await this.aggregateByProductForBills(
+      billsInRange.map((b) => b._id as Types.ObjectId),
+      'amountTotal',
+    );
 
     return {
       customerId: query.customerId,

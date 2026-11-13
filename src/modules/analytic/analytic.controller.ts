@@ -18,7 +18,9 @@ import {
 } from '../bills/dto/bill-response.dto';
 import { BillSummaryParams } from '../bills/models/bill.model';
 import { AnalyticService } from './analytic.service';
+import { CustomerProductHabitsDto } from './dto/customer-product-habits.dto';
 import { CustomerPurchaseReportDto } from './dto/customer-purchase-report.dto';
+import { CustomerProductHabitsParams } from './models/customer-product-habits.params';
 import { UnlinkedBillsByCustomerItemDto } from './dto/unlinked-bills-response.dto';
 import { CustomerPurchaseReportParams } from './models/customer-purchase-report.params';
 import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
@@ -116,5 +118,15 @@ export class AnalyticController {
     isDeleted?: boolean,
   ) {
     return this.analyticService.getCustomerPurchaseReport(query, isDeleted);
+  }
+
+  @Get('customer-product-habits')
+  @ApiOperation({
+    summary:
+      'Top products from the customer’s latest N bills (no date range). For editor suggestions.',
+  })
+  @ApiOkResponse({ type: CustomerProductHabitsDto })
+  getCustomerProductHabits(@Query() query: CustomerProductHabitsParams) {
+    return this.analyticService.getCustomerProductHabits(query);
   }
 }
