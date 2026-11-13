@@ -14,7 +14,7 @@ export class BillSummaryByDateItemDto {
   @ApiProperty({ type: String, format: 'date-time' })
   name: Date;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Tổng field sum của các HĐ trong ngày' })
   totalSpent: number;
 }
 
@@ -25,9 +25,9 @@ export class BillSummaryByCustomerItemDto {
   @ApiProperty()
   customerId: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Tổng field sum của các HĐ theo khách' })
   totalSpent: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Số hóa đơn trong kỳ' })
   billCount: number;
 }

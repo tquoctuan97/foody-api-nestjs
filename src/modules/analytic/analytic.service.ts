@@ -162,14 +162,11 @@ export class AnalyticService {
       return this.billModel
         .aggregate([
           { $match: matchStage },
-          { $unwind: '$billList' },
           {
             $group: {
               _id: '$customerId',
               customerName: { $first: '$customerName' },
-              totalSpent: {
-                $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-              },
+              totalSpent: { $sum: '$sum' },
               billCount: { $sum: 1 },
             },
           },
@@ -189,13 +186,10 @@ export class AnalyticService {
     return this.billModel
       .aggregate([
         { $match: matchStage },
-        { $unwind: '$billList' },
         {
           $group: {
             _id: '$billDate',
-            totalSpent: {
-              $sum: { $multiply: ['$billList.quantity', '$billList.price'] },
-            },
+            totalSpent: { $sum: '$sum' },
           },
         },
         {
@@ -393,6 +387,184 @@ export class AnalyticService {
       netValue,
       debtBill,
       byProduct,
+    };
+  }
+
+  private dateRangeBillMatch(
+    billDateFrom: Date,
+    billDateTo: Date,
+    isDeleted?: boolean,
+  ): FilterQuery<Bill> {
+    return {
+      billDate: { $gte: billDateFrom, $lte: billDateTo },
+      ...softDeleteFilter(isDeleted),
+    };
+  }
+
+  private linkedCustomerMatch(): FilterQuery<Bill> {
+    return { customerId: { $exists: true, $ne: null } };
+  }
+
+  async getOverviewFinance(
+    billDateFrom: string,
+    billDateTo: string,
+    isDeleted?: boolean,
+  ) {
+    const range = this.parseBillDateRange(billDateFrom, billDateTo);
+    const baseMatch = this.dateRangeBillMatch(
+      range.billDateFrom,
+      range.billDateTo,
+      isDeleted,
+    );
+
+    const [revenueAgg, debtAgg] = await Promise.all([
+      this.billModel
+        .aggregate([
+          { $match: baseMatch },
+          { $group: { _id: null, revenue: { $sum: '$sum' } } },
+        ])
+        .exec(),
+      this.billModel
+        .aggregate([
+          {
+            $match: { ...baseMatch, ...this.linkedCustomerMatch() },
+          },
+          { $sort: { billDate: -1, createdAt: -1 } },
+          {
+            $group: {
+              _id: '$customerId',
+              finalResult: { $first: '$finalResult' },
+            },
+          },
+          { $match: { finalResult: { $gt: 0 } } },
+          { $group: { _id: null, debt: { $sum: '$finalResult' } } },
+        ])
+        .exec(),
+    ]);
+
+    const revenue = revenueAgg[0]?.revenue ?? 0;
+    const debt = debtAgg[0]?.debt ?? 0;
+
+    return {
+      billDateFrom,
+      billDateTo,
+      revenue,
+      debt,
+      net: revenue - debt,
+    };
+  }
+
+  async getOverviewProduct(
+    billDateFrom: string,
+    billDateTo: string,
+    isDeleted?: boolean,
+  ) {
+    const range = this.parseBillDateRange(billDateFrom, billDateTo);
+    const match = this.dateRangeBillMatch(
+      range.billDateFrom,
+      range.billDateTo,
+      isDeleted,
+    );
+
+    const bills = await this.billModel.find(match).select('_id').lean().exec();
+    const products = await this.aggregateByProductForBills(
+      bills.map((b) => b._id as Types.ObjectId),
+      'purchaseCount',
+    );
+
+    return {
+      billDateFrom,
+      billDateTo,
+      products: products.slice(0, 5),
+    };
+  }
+
+  async getOverviewCustomer(
+    billDateFrom: string,
+    billDateTo: string,
+    isDeleted?: boolean,
+  ) {
+    const range = this.parseBillDateRange(billDateFrom, billDateTo);
+    const match = {
+      ...this.dateRangeBillMatch(range.billDateFrom, range.billDateTo, isDeleted),
+      ...this.linkedCustomerMatch(),
+    };
+
+    const [facet] = await this.billModel
+      .aggregate([
+        { $match: match },
+        {
+          $facet: {
+            topByBillCount: [
+              {
+                $group: {
+                  _id: '$customerId',
+                  customerName: { $first: '$customerName' },
+                  billCount: { $sum: 1 },
+                },
+              },
+              { $sort: { billCount: -1, customerName: 1 } },
+              { $limit: 5 },
+              {
+                $project: {
+                  _id: 0,
+                  customerId: { $toString: '$_id' },
+                  customerName: 1,
+                  billCount: 1,
+                },
+              },
+            ],
+            topByRevenue: [
+              {
+                $group: {
+                  _id: '$customerId',
+                  customerName: { $first: '$customerName' },
+                  revenue: { $sum: '$sum' },
+                },
+              },
+              { $sort: { revenue: -1, customerName: 1 } },
+              { $limit: 5 },
+              {
+                $project: {
+                  _id: 0,
+                  customerId: { $toString: '$_id' },
+                  customerName: 1,
+                  revenue: 1,
+                },
+              },
+            ],
+            topByDebt: [
+              { $sort: { billDate: -1, createdAt: -1 } },
+              {
+                $group: {
+                  _id: '$customerId',
+                  customerName: { $first: '$customerName' },
+                  debt: { $first: '$finalResult' },
+                },
+              },
+              { $match: { debt: { $gt: 0 } } },
+              { $sort: { debt: -1, customerName: 1 } },
+              { $limit: 5 },
+              {
+                $project: {
+                  _id: 0,
+                  customerId: { $toString: '$_id' },
+                  customerName: 1,
+                  debt: 1,
+                },
+              },
+            ],
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      billDateFrom,
+      billDateTo,
+      topByBillCount: facet?.topByBillCount ?? [],
+      topByRevenue: facet?.topByRevenue ?? [],
+      topByDebt: facet?.topByDebt ?? [],
     };
   }
 }

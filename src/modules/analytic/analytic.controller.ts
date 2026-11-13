@@ -1,9 +1,4 @@
-import {
-  Controller,
-  Get,
-  ParseBoolPipe,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, ParseBoolPipe, Query } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
@@ -20,7 +15,13 @@ import { BillSummaryParams } from '../bills/models/bill.model';
 import { AnalyticService } from './analytic.service';
 import { CustomerProductHabitsDto } from './dto/customer-product-habits.dto';
 import { CustomerPurchaseReportDto } from './dto/customer-purchase-report.dto';
+import {
+  OverviewCustomerDto,
+  OverviewFinanceDto,
+  OverviewProductDto,
+} from './dto/overview.dto';
 import { CustomerProductHabitsParams } from './models/customer-product-habits.params';
+import { OverviewDateRangeParams } from './models/overview-date-range.params';
 import { UnlinkedBillsByCustomerItemDto } from './dto/unlinked-bills-response.dto';
 import { CustomerPurchaseReportParams } from './models/customer-purchase-report.params';
 import { UnlinkedBillItemsParams } from './models/unlinked-bill-items.params';
@@ -36,7 +37,7 @@ export class AnalyticController {
   @ApiOperation({
     summary: 'Summarize bills in a date range',
     description:
-      'Requires billDateFrom and billDateTo. groupBy aggregates by calendar day or customer.',
+      'Requires billDateFrom and billDateTo. totalSpent = sum of bill.sum. groupBy: date or customer.',
   })
   @ApiOkResponse({
     schema: {
@@ -128,5 +129,61 @@ export class AnalyticController {
   @ApiOkResponse({ type: CustomerProductHabitsDto })
   getCustomerProductHabits(@Query() query: CustomerProductHabitsParams) {
     return this.analyticService.getCustomerProductHabits(query);
+  }
+
+  @Get('overview-finance')
+  @ApiOperation({
+    summary: 'Finance overview for a date range',
+    description:
+      'revenue = sum of bill.sum; debt = sum of latest bill finalResult per customer in range (finalResult > 0); net = revenue − debt.',
+  })
+  @ApiOkResponse({ type: OverviewFinanceDto })
+  getOverviewFinance(
+    @Query() query: OverviewDateRangeParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getOverviewFinance(
+      query.billDateFrom,
+      query.billDateTo,
+      isDeleted,
+    );
+  }
+
+  @Get('overview-product')
+  @ApiOperation({
+    summary: 'Top 5 products in a date range',
+    description: 'By purchaseCount (billList lines with productId), includes amountTotal.',
+  })
+  @ApiOkResponse({ type: OverviewProductDto })
+  getOverviewProduct(
+    @Query() query: OverviewDateRangeParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getOverviewProduct(
+      query.billDateFrom,
+      query.billDateTo,
+      isDeleted,
+    );
+  }
+
+  @Get('overview-customer')
+  @ApiOperation({
+    summary: 'Top 5 customers in a date range',
+    description:
+      'By bill count, by sum revenue, and by latest-bill finalResult (debt).',
+  })
+  @ApiOkResponse({ type: OverviewCustomerDto })
+  getOverviewCustomer(
+    @Query() query: OverviewDateRangeParams,
+    @Query('isDeleted', new ParseBoolPipe({ optional: true }))
+    isDeleted?: boolean,
+  ) {
+    return this.analyticService.getOverviewCustomer(
+      query.billDateFrom,
+      query.billDateTo,
+      isDeleted,
+    );
   }
 }
